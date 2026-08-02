@@ -35,7 +35,8 @@ const Register = () => {
       const res = await register(username, email, password);
       if (res.requiresVerification) {
         setStep('verify');
-        setSuccessMsg(`A 6-digit verification code was sent to ${email}. Check server log / email.`);
+        if (res.demoCode) setOtpCode(res.demoCode);
+        setSuccessMsg(res.message || `A 6-digit verification code was sent to ${email}.`);
       } else {
         navigate('/');
       }

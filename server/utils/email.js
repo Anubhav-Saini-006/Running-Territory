@@ -39,8 +39,12 @@ export const sendVerificationEmail = async (email, username, code) => {
 
       await transporter.sendMail(mailOptions);
       console.log(`✅ Real verification email dispatched to ${email}`);
+      return { sent: true };
     } catch (err) {
       console.error('Nodemailer SMTP dispatch error:', err.message);
+      return { sent: false, error: err.message };
     }
   }
+
+  return { sent: false, reason: 'No SMTP credentials configured in .env' };
 };

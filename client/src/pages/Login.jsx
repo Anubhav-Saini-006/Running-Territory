@@ -29,13 +29,15 @@ const Login = () => {
       const res = await login(email, password);
       if (res.requiresVerification) {
         setStep('verify');
-        setSuccessMsg('Please verify your email address to log in.');
+        if (res.demoCode) setOtpCode(res.demoCode);
+        setSuccessMsg(res.message || 'Please verify your email address to log in.');
       } else {
         navigate('/');
       }
     } catch (err) {
       if (err.response?.data?.requiresVerification) {
         setStep('verify');
+        if (err.response.data.demoCode) setOtpCode(err.response.data.demoCode);
         setSuccessMsg(err.response.data.message || 'Please enter your verification code.');
       } else {
         setError(err.response?.data?.message || 'Login failed. Please check credentials.');

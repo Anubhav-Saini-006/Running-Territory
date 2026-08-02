@@ -31,12 +31,17 @@ router.post('/register', async (req, res) => {
         existingEmail.verificationTokenExpires = new Date(Date.now() + 15 * 60 * 1000);
         await existingEmail.save();
 
-        await sendVerificationEmail(existingEmail.email, existingEmail.username, otpCode);
+        const emailResult = await sendVerificationEmail(existingEmail.email, existingEmail.username, otpCode);
+
+        const msg = emailResult.sent
+          ? `A 6-digit verification code was sent to ${existingEmail.email}.`
+          : `Verification code generated! (Code: ${otpCode})`;
 
         return res.status(200).json({
           requiresVerification: true,
           email: existingEmail.email,
-          message: 'Account exists but is unverified. A new verification OTP code has been sent to your email.'
+          demoCode: emailResult.sent ? null : otpCode,
+          message: msg
         });
       }
       return res.status(400).json({ message: 'Email is already registered' });
@@ -65,12 +70,17 @@ router.post('/register', async (req, res) => {
     });
 
     // Dispatch verification email / console log
-    await sendVerificationEmail(user.email, user.username, otpCode);
+    const emailResult = await sendVerificationEmail(user.email, user.username, otpCode);
+
+    const msg = emailResult.sent
+      ? `Registration successful! A 6-digit verification code was sent to ${user.email}.`
+      : `Registration successful! Verification Code: ${otpCode}`;
 
     res.status(201).json({
       requiresVerification: true,
       email: user.email,
-      message: 'Registration successful! A 6-digit verification code has been sent to your email.'
+      demoCode: emailResult.sent ? null : otpCode,
+      message: msg
     });
   } catch (error) {
     console.error('Register error:', error);
@@ -161,9 +171,16 @@ router.post('/resend-verification', async (req, res) => {
     user.verificationTokenExpires = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
-    await sendVerificationEmail(user.email, user.username, otpCode);
+    const emailResult = await sendVerificationEmail(user.email, user.username, otpCode);
 
-    res.json({ message: 'A new 6-digit verification code has been sent to your email.' });
+    const msg = emailResult.sent
+      ? `A new 6-digit verification code has been sent to your email.`
+      : `New Verification Code: ${otpCode}`;
+
+    res.json({
+      demoCode: emailResult.sent ? null : otpCode,
+      message: msg
+    });
   } catch (error) {
     console.error('Resend verification error:', error);
     res.status(500).json({ message: 'Server error resending verification code' });
@@ -191,10 +208,22 @@ router.post('/login', async (req, res) => {
     }
 
     if (!user.isVerified) {
+      const otpCode = user.verificationToken || Math.floor(100000 + Math.random() * 900000).toString();
+      if (!user.verificationToken) {
+        user.verificationToken = otpCode;
+        user.verificationTokenExpires = new Date(Date.now() + 15 * 60 * 1000);
+        await user.save();
+      }
+
+      const emailResult = await sendVerificationEmail(user.email, user.username, otpCode);
+
       return res.status(400).json({
         requiresVerification: true,
         email: user.email,
-        message: 'Your email address is not verified yet. Please enter the verification code sent to your email.'
+        demoCode: emailResult.sent ? null : otpCode,
+        message: emailResult.sent
+          ? 'Your email is not verified yet. A verification code was sent to your email.'
+          : `Verification Code Required: ${otpCode}`
       });
     }
 
