@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { MapContainer, TileLayer, Polyline, Circle, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { ThemeContext } from '../context/ThemeContext';
 
 // Fix standard Leaflet marker icon issue in React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -10,10 +11,11 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Helper component to recenter map view dynamically
+// Helper component to recenter map view dynamically and fix grey background layout gaps
 const MapRecenter = ({ center, zoom }) => {
   const map = useMap();
   useEffect(() => {
+    map.invalidateSize();
     if (center && center[0] !== 0 && center[1] !== 0) {
       map.setView(center, zoom || 14);
     }
@@ -58,8 +60,11 @@ const RunMap = ({
   allRuns = [],
   topExplorers = [],
   focusedExplorer = null,
-  currentUserId = null
+  currentUserId = null,
+  isHistoryPage = false
 }) => {
+  const { theme } = useContext(ThemeContext);
+
   const [showUserTerritory, setShowUserTerritory] = useState(true);
   const [showTopCandidateRoute, setShowTopCandidateRoute] = useState(true);
   const [showDiscoveryRadius, setShowDiscoveryRadius] = useState(true);
@@ -89,69 +94,106 @@ const RunMap = ({
     center = [allRuns[0].route[0].latitude, allRuns[0].route[0].longitude];
   }
 
+  const [mapCenterPos, setMapCenterPos] = useState(center);
+  const [recenterCount, setRecenterCount] = useState(0);
+
+  useEffect(() => {
+    setMapCenterPos(center);
+  }, [center]);
+
+  const handleManualRecenter = () => {
+    setMapCenterPos([...center]);
+    setRecenterCount((prev) => prev + 1);
+  };
+
   const startPoint = selectedRouteCoords.length > 0 ? selectedRouteCoords[0] : null;
   const endPoint = selectedRouteCoords.length > 0 ? selectedRouteCoords[selectedRouteCoords.length - 1] : null;
 
+  // Tile URL based on Dark/Light Mode Theme Context
+  const tileUrl = theme === 'dark'
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  const tileAttribution = theme === 'dark'
+    ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
   return (
     <div className="map-container relative-container">
-      {/* Map Interactive Layer Toggles */}
-      <div className="map-layer-controls">
-        <label className="map-control-chip green-chip">
-          <input
-            type="checkbox"
-            checked={showUserTerritory}
-            onChange={(e) => setShowUserTerritory(e.target.checked)}
-          />
-          <span className="color-dot green-dot"></span> Your Territory
-        </label>
+      {/* Floating Recenter Button (Zomato/Swiggy style) */}
+      <button
+        type="button"
+        className="map-recenter-btn"
+        onClick={handleManualRecenter}
+        title="Recenter Map"
+      >
+        🎯 Center Location
+      </button>
 
-        {top1Explorer && (
-          <label className="map-control-chip red-chip">
+      {/* Map Interactive Layer Toggles (Dashboard ONLY) */}
+      {!isHistoryPage && (
+        <div className="map-layer-controls">
+          <label className="map-control-chip green-chip">
             <input
               type="checkbox"
-              checked={showTopCandidateRoute}
-              onChange={(e) => setShowTopCandidateRoute(e.target.checked)}
+              checked={showUserTerritory}
+              onChange={(e) => setShowUserTerritory(e.target.checked)}
             />
-            <span className="color-dot red-dot"></span> Top Explorer (#1 {top1Explorer.username})
+            <span className="color-dot green-dot"></span> Your Territory
           </label>
-        )}
 
-        <label className="map-control-chip">
-          <input
-            type="checkbox"
-            checked={showDiscoveryRadius}
-            onChange={(e) => setShowDiscoveryRadius(e.target.checked)}
-          />
-          ⭕ 5km Zone
-        </label>
+          {top1Explorer && (
+            <label className="map-control-chip red-chip">
+              <input
+                type="checkbox"
+                checked={showTopCandidateRoute}
+                onChange={(e) => setShowTopCandidateRoute(e.target.checked)}
+              />
+              <span className="color-dot red-dot"></span> Top Explorer (#1 {top1Explorer.username})
+            </label>
+          )}
 
-        <label className="map-control-chip">
-          <input
-            type="checkbox"
-            checked={showTopExplorers}
-            onChange={(e) => setShowTopExplorers(e.target.checked)}
-          />
-          🏆 Markers
-        </label>
-      </div>
+          <label className="map-control-chip">
+            <input
+              type="checkbox"
+              checked={showDiscoveryRadius}
+              onChange={(e) => setShowDiscoveryRadius(e.target.checked)}
+            />
+            ⭕ 5km Zone
+          </label>
+
+          <label className="map-control-chip">
+            <input
+              type="checkbox"
+              checked={showTopExplorers}
+              onChange={(e) => setShowTopExplorers(e.target.checked)}
+            />
+            🏆 Markers
+          </label>
+        </div>
+      )}
 
       <MapContainer
-        center={center}
+        center={mapCenterPos}
         zoom={14}
-        scrollWheelZoom={true}
-        style={{ width: '100%', height: '100%', borderRadius: '8px' }}
+        scrollWheelZoom={isHistoryPage}
+        zoomControl={isHistoryPage}
+        doubleClickZoom={isHistoryPage}
+        touchZoom={isHistoryPage}
+        dragging={true}
+        style={{ width: '100%', height: '100%', borderRadius: '12px' }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={tileAttribution}
+          url={tileUrl}
         />
 
-        <MapRecenter center={center} zoom={14} />
+        <MapRecenter center={mapCenterPos} zoom={14} key={recenterCount} />
 
         {/* 5km Radius Discovery Circle Boundary */}
-        {showDiscoveryRadius && (
+        {!isHistoryPage && showDiscoveryRadius && (
           <Circle
-            center={center}
+            center={mapCenterPos}
             radius={5000}
             pathOptions={{
               color: '#10b981',
@@ -163,8 +205,8 @@ const RunMap = ({
           />
         )}
 
-        {/* 🟢 RENDER USER'S ENTIRE EXPLORED TERRITORY IN VIBRANT GREEN (TOGGLEABLE) */}
-        {showUserTerritory &&
+        {/* 🟢 RENDER USER'S ENTIRE EXPLORED TERRITORY IN VIBRANT GREEN */}
+        {(isHistoryPage || showUserTerritory) &&
           allRuns.map((run, idx) => {
             if (!run.route || run.route.length < 2) return null;
             const points = run.route.map((p) => [p.latitude, p.longitude]);
@@ -179,8 +221,9 @@ const RunMap = ({
             );
           })}
 
-        {/* 🔴 RENDER TOP CANDIDATE / EXPLORER'S COVERED ROUTES IN CRIMSON RED (TOGGLEABLE) */}
-        {showTopCandidateRoute &&
+        {/* 🔴 RENDER TOP CANDIDATE / EXPLORER'S COVERED ROUTES IN CRIMSON RED */}
+        {!isHistoryPage &&
+          showTopCandidateRoute &&
           top1Explorer &&
           top1Explorer.routes &&
           top1Explorer.routes.map((route, idx) => {
@@ -248,7 +291,8 @@ const RunMap = ({
         )}
 
         {/* Render Top 3 Local Explorers Markers on Map */}
-        {showTopExplorers &&
+        {!isHistoryPage &&
+          showTopExplorers &&
           topExplorers.map((explorer) => {
             if (!explorer.lastLocation) return null;
             const pos = [explorer.lastLocation.latitude, explorer.lastLocation.longitude];

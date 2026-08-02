@@ -8,17 +8,17 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(true);
 
-// Configure Axios baseURL for Render backend deployment
-if (import.meta.env.VITE_API_URL) {
-  axios.defaults.baseURL = import.meta.env.VITE_API_URL;
-}
+  // Configure Axios baseURL for Render backend deployment
+  if (import.meta.env.VITE_API_URL) {
+    axios.defaults.baseURL = import.meta.env.VITE_API_URL;
+  }
 
-// Configure Axios default headers
-if (token) {
-  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-} else {
-  delete axios.defaults.headers.common['Authorization'];
-}
+  // Configure Axios default headers
+  if (token) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete axios.defaults.headers.common['Authorization'];
+  }
 
   // Load user on startup if token exists
   useEffect(() => {
@@ -40,19 +40,33 @@ if (token) {
 
   const register = async (username, email, password) => {
     const response = await axios.post('/api/auth/register', { username, email, password });
+    return response.data;
+  };
+
+  const verifyEmail = async (email, code) => {
+    const response = await axios.post('/api/auth/verify-email', { email, code });
     const { token: newToken, user: newUser } = response.data;
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
-    setUser(newUser);
+    if (newToken && newUser) {
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+      setUser(newUser);
+    }
+    return response.data;
+  };
+
+  const resendVerification = async (email) => {
+    const response = await axios.post('/api/auth/resend-verification', { email });
     return response.data;
   };
 
   const login = async (email, password) => {
     const response = await axios.post('/api/auth/login', { email, password });
     const { token: newToken, user: newUser } = response.data;
-    localStorage.setItem('token', newToken);
-    setToken(newToken);
-    setUser(newUser);
+    if (newToken && newUser) {
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+      setUser(newUser);
+    }
     return response.data;
   };
 
@@ -64,7 +78,18 @@ if (token) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, register, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        loading,
+        register,
+        verifyEmail,
+        resendVerification,
+        login,
+        logout
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

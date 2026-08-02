@@ -53,6 +53,18 @@ const userSchema = new mongoose.Schema({
     type: Number, // consecutive days
     default: 1
   },
+  isVerified: {
+    type: Boolean,
+    default: false
+  },
+  verificationToken: {
+    type: String,
+    default: null
+  },
+  verificationTokenExpires: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

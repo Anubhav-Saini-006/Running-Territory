@@ -100,49 +100,51 @@ router.get('/leaderboard', async (req, res) => {
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     };
 
-    // Calculate approximate area discovery for each user in MongoDB
-    const leaderboardList = Object.values(userStatsMap).map((user) => {
-      const allUserPoints = user.routes.flat();
-      let discoveredCount = 0;
+    // Filter out any user who has 0 active runs or no routes (e.g. deleted from Compass)
+    const leaderboardList = Object.values(userStatsMap)
+      .filter((user) => user.runsCount > 0 && user.routes.length > 0 && user.totalDistance > 0)
+      .map((user) => {
+        const allUserPoints = user.routes.flat();
+        let discoveredCount = 0;
 
-      // 30x30 grid sample within 5km circle
-      const steps = 30;
-      const latDelta = (radiusKm / 111.32) * 2;
-      const lngDelta = (radiusKm / (111.32 * Math.cos((centerLat * Math.PI) / 180))) * 2;
-      const minLat = centerLat - latDelta / 2;
-      const minLng = centerLng - lngDelta / 2;
-      const latStep = latDelta / steps;
-      const lngStep = lngDelta / steps;
+        // 30x30 grid sample within 5km circle
+        const steps = 30;
+        const latDelta = (radiusKm / 111.32) * 2;
+        const lngDelta = (radiusKm / (111.32 * Math.cos((centerLat * Math.PI) / 180))) * 2;
+        const minLat = centerLat - latDelta / 2;
+        const minLng = centerLng - lngDelta / 2;
+        const latStep = latDelta / steps;
+        const lngStep = lngDelta / steps;
 
-      let validCells = 0;
-      for (let i = 0; i <= steps; i++) {
-        for (let j = 0; j <= steps; j++) {
-          const cLat = minLat + i * latStep;
-          const cLng = minLng + j * lngStep;
-          if (calcDist(centerLat, centerLng, cLat, cLng) <= radiusKm * 1000) {
-            validCells++;
-            const found = allUserPoints.some((pt) => calcDist(cLat, cLng, pt.latitude, pt.longitude) <= 75);
-            if (found) discoveredCount++;
+        let validCells = 0;
+        for (let i = 0; i <= steps; i++) {
+          for (let j = 0; j <= steps; j++) {
+            const cLat = minLat + i * latStep;
+            const cLng = minLng + j * lngStep;
+            if (calcDist(centerLat, centerLng, cLat, cLng) <= radiusKm * 1000) {
+              validCells++;
+              const found = allUserPoints.some((pt) => calcDist(cLat, cLng, pt.latitude, pt.longitude) <= 75);
+              if (found) discoveredCount++;
+            }
           }
         }
-      }
 
-      const ratio = validCells > 0 ? discoveredCount / validCells : 0;
-      const totalCircleAreaKm2 = Math.PI * radiusKm * radiusKm;
+        const ratio = validCells > 0 ? discoveredCount / validCells : 0;
+        const totalCircleAreaKm2 = Math.PI * radiusKm * radiusKm;
 
-      return {
-        userId: user.userId,
-        username: user.username,
-        percentage: Number((ratio * 100).toFixed(1)),
-        discoveredKm2: Number((ratio * totalCircleAreaKm2).toFixed(2)),
-        totalDistanceKm: Number((user.totalDistance / 1000).toFixed(2)),
-        lastLocation: user.lastPoint || { latitude: centerLat, longitude: centerLng },
-        routes: user.routes
-      };
-    });
+        return {
+          userId: user.userId,
+          username: user.username,
+          percentage: Number((ratio * 100).toFixed(1)),
+          discoveredKm2: Number((ratio * totalCircleAreaKm2).toFixed(2)),
+          totalDistanceKm: Number((user.totalDistance / 1000).toFixed(2)),
+          lastLocation: user.lastPoint || { latitude: centerLat, longitude: centerLng },
+          routes: user.routes
+        };
+      });
 
-    // Filter only real DB users who have runs
-    let combined = [...leaderboardList];
+    // Filter only active users with >0 discovery
+    let combined = leaderboardList.filter((item) => item.discoveredKm2 > 0 || item.totalDistanceKm > 0);
 
     // Sort descending by percentage
     combined.sort((a, b) => b.percentage - a.percentage);

@@ -1,14 +1,18 @@
-import React, { useContext } from 'react';
+import React, { useState, useContext } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { ThemeContext } from '../context/ThemeContext';
 
 const Navbar = () => {
   const { user, logout } = useContext(AuthContext);
+  const { theme, toggleTheme } = useContext(ThemeContext);
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
+    setMobileMenuOpen(false);
     navigate('/login');
   };
 
@@ -16,22 +20,56 @@ const Navbar = () => {
 
   return (
     <nav className="navbar">
-      <div className="navbar-brand">
-        <Link to="/" className="navbar-logo">
+      <div className="navbar-header">
+        <Link to="/" className="navbar-logo" onClick={() => setMobileMenuOpen(false)}>
           🏃‍♂️ Running Territory
         </Link>
+
+        <div className="navbar-header-actions">
+          {/* Theme Toggle Button */}
+          <button
+            type="button"
+            className="theme-toggle-btn"
+            onClick={toggleTheme}
+            title="Toggle Light/Dark Theme"
+          >
+            {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+          </button>
+
+          {user && (
+            <button
+              className="mobile-menu-btn"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? '✕' : '☰'}
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="navbar-links">
+      <div className={`navbar-links ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         {user ? (
           <>
-            <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>
+            <Link
+              to="/"
+              className={`nav-link ${isActive('/') ? 'active' : ''}`}
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Dashboard
             </Link>
-            <Link to="/history" className={`nav-link ${isActive('/history') ? 'active' : ''}`}>
+            <Link
+              to="/history"
+              className={`nav-link ${isActive('/history') ? 'active' : ''}`}
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Run History
             </Link>
-            <Link to="/profile" className={`nav-link ${isActive('/profile') ? 'active' : ''}`}>
+            <Link
+              to="/profile"
+              className={`nav-link ${isActive('/profile') ? 'active' : ''}`}
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Profile
             </Link>
 
