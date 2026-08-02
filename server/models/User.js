@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   username: {
     type: String,
     required: [true, 'Username is required'],
@@ -19,6 +24,34 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Password is required'],
     minlength: [6, 'Password must be at least 6 characters long']
+  },
+  bio: {
+    type: String,
+    default: 'Runner exploring territories one kilometer at a time.'
+  },
+  profilePicture: {
+    type: String,
+    default: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80'
+  },
+  totalDistance: {
+    type: Number, // in meters
+    default: 0
+  },
+  totalRuns: {
+    type: Number,
+    default: 0
+  },
+  longestRun: {
+    type: Number, // in meters
+    default: 0
+  },
+  averagePace: {
+    type: Number, // min/km
+    default: 0
+  },
+  currentStreak: {
+    type: Number, // consecutive days
+    default: 1
   },
   createdAt: {
     type: Date,
