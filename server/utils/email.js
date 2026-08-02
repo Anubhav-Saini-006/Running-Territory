@@ -45,9 +45,11 @@ export const sendVerificationEmail = async (email, username, code) => {
       } else {
         const errorData = await response.json();
         console.error('Resend API error response:', errorData);
+        return { sent: false, error: errorData.message || 'Resend API error' };
       }
     } catch (err) {
       console.error('Resend API error:', err.message);
+      return { sent: false, error: err.message };
     }
   }
 
