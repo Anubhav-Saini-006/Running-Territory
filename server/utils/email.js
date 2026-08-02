@@ -15,11 +15,14 @@ export const sendVerificationEmail = async (email, username, code) => {
         host,
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: process.env.SMTP_SECURE === 'true',
-        auth: { user, pass }
+        auth: { user, pass },
+        connectionTimeout: 3000,
+        greetingTimeout: 3000,
+        socketTimeout: 3000
       });
 
       const mailOptions = {
-        from: '"Running Territory" <noreply@runningterritory.com>',
+        from: `"Running Territory" <${user}>`,
         to: email,
         subject: '🔐 Verify Your Running Territory Account',
         html: `
@@ -37,11 +40,16 @@ export const sendVerificationEmail = async (email, username, code) => {
         `
       };
 
-      await transporter.sendMail(mailOptions);
+      const sendPromise = transporter.sendMail(mailOptions);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('SMTP connection timeout (3s limit reached)')), 3000)
+      );
+
+      await Promise.race([sendPromise, timeoutPromise]);
       console.log(`✅ Real verification email dispatched to ${email}`);
       return { sent: true };
     } catch (err) {
-      console.error('Nodemailer SMTP dispatch error:', err.message);
+      console.error('Nodemailer SMTP dispatch warning/error:', err.message);
       return { sent: false, error: err.message };
     }
   }
