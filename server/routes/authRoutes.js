@@ -56,7 +56,10 @@ router.post('/register', async (req, res) => {
           message: `A 6-digit verification code has been sent to ${existingEmail.email}.`
         });
       }
-      return res.status(400).json({ message: 'Email is already registered' });
+      return res.status(400).json({
+        alreadyRegistered: true,
+        message: 'This email is already registered. Redirecting to login...'
+      });
     }
 
     const existingUsername = await User.findOne({ username: new RegExp(`^${escapeRegex(normalizedUsername)}$`, 'i') });

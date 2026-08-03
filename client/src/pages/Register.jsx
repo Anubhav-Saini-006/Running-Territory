@@ -41,7 +41,17 @@ const Register = () => {
         navigate('/');
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed.');
+      const errMsg = err.response?.data?.message || 'Registration failed.';
+      const isAlreadyRegistered = err.response?.data?.alreadyRegistered || errMsg.toLowerCase().includes('already registered');
+
+      if (isAlreadyRegistered) {
+        setSuccessMsg('This email is already registered! Redirecting to login page...');
+        setTimeout(() => {
+          navigate('/login');
+        }, 1500);
+      } else {
+        setError(errMsg);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -89,6 +99,7 @@ const Register = () => {
             <p className="auth-subtitle">Create your account to start tracking runs.</p>
 
             {error && <div className="alert alert-danger">{error}</div>}
+            {successMsg && <div className="alert alert-success">{successMsg}</div>}
 
             <form onSubmit={handleRegisterSubmit}>
               <div className="form-group">
