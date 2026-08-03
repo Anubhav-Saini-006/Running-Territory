@@ -12,6 +12,9 @@ const generateToken = (id) => {
   return jwt.sign({ id }, secret, { expiresIn: '30d' });
 };
 
+// Helper function to escape special regex characters safely
+const escapeRegex = (text) => text.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+
 // @route   POST /api/auth/register
 // @desc    Register a new user and send Gmail OTP verification code
 router.post('/register', async (req, res) => {
@@ -51,7 +54,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Email is already registered' });
     }
 
-    const existingUsername = await User.findOne({ username: new RegExp(`^${normalizedUsername}$`, 'i') });
+    const existingUsername = await User.findOne({ username: new RegExp(`^${escapeRegex(normalizedUsername)}$`, 'i') });
     if (existingUsername) {
       return res.status(400).json({ message: 'Username is already taken' });
     }
@@ -101,7 +104,14 @@ router.post('/verify-email', async (req, res) => {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({
+      $or: [
+        { email: normalizedEmail },
+        { username: normalizedEmail },
+        { email: new RegExp(`^${escapeRegex(normalizedEmail)}$`, 'i') }
+      ]
+    });
+
     if (!user) {
       return res.status(404).json({ message: 'User account not found' });
     }
@@ -162,7 +172,11 @@ router.post('/resend-verification', async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
     const user = await User.findOne({
-      $or: [{ email: normalizedEmail }, { email: new RegExp(`^${normalizedEmail}$`, 'i') }]
+      $or: [
+        { email: normalizedEmail },
+        { username: normalizedEmail },
+        { email: new RegExp(`^${escapeRegex(normalizedEmail)}$`, 'i') }
+      ]
     });
 
     if (!user) {
@@ -202,16 +216,21 @@ router.post('/forgot-password', async (req, res) => {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({ message: 'Please enter your registered email address' });
+      return res.status(400).json({ message: 'Please enter your registered email address or username' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const identifier = email.trim();
     const user = await User.findOne({
-      $or: [{ email: normalizedEmail }, { email: new RegExp(`^${normalizedEmail}$`, 'i') }]
+      $or: [
+        { email: identifier.toLowerCase() },
+        { username: identifier },
+        { email: new RegExp(`^${escapeRegex(identifier)}$`, 'i') },
+        { username: new RegExp(`^${escapeRegex(identifier)}$`, 'i') }
+      ]
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'No account found with this email address' });
+      return res.status(404).json({ message: 'No account found with this email address or username' });
     }
 
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -251,9 +270,14 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ message: 'New password must be at least 6 characters long' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const identifier = email.trim();
     const user = await User.findOne({
-      $or: [{ email: normalizedEmail }, { email: new RegExp(`^${normalizedEmail}$`, 'i') }]
+      $or: [
+        { email: identifier.toLowerCase() },
+        { username: identifier },
+        { email: new RegExp(`^${escapeRegex(identifier)}$`, 'i') },
+        { username: new RegExp(`^${escapeRegex(identifier)}$`, 'i') }
+      ]
     });
 
     if (!user) {
@@ -285,27 +309,34 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // @route   POST /api/auth/login
-// @desc    Authenticate user & check verification status
+// @desc    Authenticate user by email OR username & check verification status
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Please provide email and password' });
+      return res.status(400).json({ message: 'Please provide email/username and password' });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const identifier = email.trim();
+
+    // Flexible lookup matching email OR username (case-insensitive)
     const user = await User.findOne({
-      $or: [{ email: normalizedEmail }, { email: new RegExp(`^${normalizedEmail}$`, 'i') }]
+      $or: [
+        { email: identifier.toLowerCase() },
+        { username: identifier },
+        { email: new RegExp(`^${escapeRegex(identifier)}$`, 'i') },
+        { username: new RegExp(`^${escapeRegex(identifier)}$`, 'i') }
+      ]
     });
 
     if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials. User account not found.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid password. Please try again.' });
     }
 
     if (!user.isVerified) {

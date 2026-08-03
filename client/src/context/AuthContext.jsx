@@ -4,8 +4,15 @@ import axios from 'axios';
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const [token, setToken] = useState(() => localStorage.getItem('token') || null);
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   // Configure Axios baseURL for Render backend deployment
@@ -13,30 +20,53 @@ export const AuthProvider = ({ children }) => {
     axios.defaults.baseURL = import.meta.env.VITE_API_URL;
   }
 
-  // Configure Axios default headers
+  // Configure Axios default headers dynamically
   if (token) {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   } else {
     delete axios.defaults.headers.common['Authorization'];
   }
 
-  // Load user on startup if token exists
+  // Verify and sync current user from backend without logging out on transient errors
   useEffect(() => {
     const fetchCurrentUser = async () => {
       if (token) {
         try {
-          const response = await axios.get('/api/auth/me');
-          setUser(response.data.user);
+          const response = await axios.get('/api/auth/me', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (response.data && response.data.user) {
+            setUser(response.data.user);
+            localStorage.setItem('user', JSON.stringify(response.data.user));
+          }
         } catch (error) {
-          console.error('Failed to verify token:', error);
-          logout();
+          console.warn('Auth token verification response/error:', error.response?.data || error.message);
+          // Only force logout if server explicitly rejects token with 401 or 403
+          if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+            logout();
+          }
         }
+      } else {
+        setUser(null);
+        localStorage.removeItem('user');
       }
       setLoading(false);
     };
 
     fetchCurrentUser();
   }, [token]);
+
+  const saveAuthData = (newToken, newUser) => {
+    if (newToken) {
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+    }
+    if (newUser) {
+      localStorage.setItem('user', JSON.stringify(newUser));
+      setUser(newUser);
+    }
+  };
 
   const register = async (username, email, password) => {
     const response = await axios.post('/api/auth/register', { username, email, password });
@@ -47,9 +77,7 @@ export const AuthProvider = ({ children }) => {
     const response = await axios.post('/api/auth/verify-email', { email, code });
     const { token: newToken, user: newUser } = response.data;
     if (newToken && newUser) {
-      localStorage.setItem('token', newToken);
-      setToken(newToken);
-      setUser(newUser);
+      saveAuthData(newToken, newUser);
     }
     return response.data;
   };
@@ -73,15 +101,14 @@ export const AuthProvider = ({ children }) => {
     const response = await axios.post('/api/auth/login', { email, password });
     const { token: newToken, user: newUser } = response.data;
     if (newToken && newUser) {
-      localStorage.setItem('token', newToken);
-      setToken(newToken);
-      setUser(newUser);
+      saveAuthData(newToken, newUser);
     }
     return response.data;
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setToken(null);
     setUser(null);
     delete axios.defaults.headers.common['Authorization'];
