@@ -120,16 +120,6 @@ const RunMap = ({
 
   return (
     <div className="map-container relative-container">
-      {/* Floating Recenter Button (Zomato/Swiggy style) */}
-      <button
-        type="button"
-        className="map-recenter-btn"
-        onClick={handleManualRecenter}
-        title="Recenter Map"
-      >
-        🎯 Center Location
-      </button>
-
       {/* Map Interactive Layer Toggles (Dashboard ONLY) */}
       {!isHistoryPage && (
         <div className="map-layer-controls">
