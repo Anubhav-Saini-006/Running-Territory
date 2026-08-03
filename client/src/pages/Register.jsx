@@ -35,8 +35,8 @@ const Register = () => {
       const res = await register(username, email, password);
       if (res.requiresVerification) {
         setStep('verify');
-        if (res.demoCode) setOtpCode(res.demoCode);
-        setSuccessMsg(res.message || `A 6-digit verification code was sent to ${email}.`);
+        setOtpCode('');
+        setSuccessMsg(res.message || `A 6-digit verification code was sent to ${email}. Check your inbox.`);
       } else {
         navigate('/');
       }
@@ -53,7 +53,7 @@ const Register = () => {
     setSuccessMsg('');
 
     if (!otpCode || otpCode.trim().length !== 6) {
-      setError('Please enter a valid 6-digit verification code.');
+      setError('Please enter the 6-digit verification code sent to your email.');
       return;
     }
 
@@ -73,8 +73,8 @@ const Register = () => {
     setSuccessMsg('');
     try {
       const res = await resendVerification(email);
-      if (res.demoCode) setOtpCode(res.demoCode);
-      setSuccessMsg(res.message || 'A new 6-digit verification code has been sent!');
+      setOtpCode('');
+      setSuccessMsg(res.message || 'A new 6-digit verification code has been sent to your email!');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to resend verification code.');
     }

@@ -29,7 +29,7 @@ const Login = () => {
       const res = await login(email, password);
       if (res.requiresVerification) {
         setStep('verify');
-        if (res.demoCode) setOtpCode(res.demoCode);
+        setOtpCode('');
         setSuccessMsg(res.message || 'Please verify your email address to log in.');
       } else {
         navigate('/');
@@ -37,7 +37,7 @@ const Login = () => {
     } catch (err) {
       if (err.response?.data?.requiresVerification) {
         setStep('verify');
-        if (err.response.data.demoCode) setOtpCode(err.response.data.demoCode);
+        setOtpCode('');
         setSuccessMsg(err.response.data.message || 'Please enter your 6-digit verification code.');
       } else {
         setError(err.response?.data?.message || 'Login failed. Please check credentials.');
@@ -53,7 +53,7 @@ const Login = () => {
     setSuccessMsg('');
 
     if (!otpCode || otpCode.trim().length !== 6) {
-      setError('Please enter the 6-digit verification code.');
+      setError('Please enter the 6-digit verification code sent to your email.');
       return;
     }
 
@@ -73,7 +73,7 @@ const Login = () => {
     setSuccessMsg('');
     try {
       const res = await resendVerification(email);
-      if (res.demoCode) setOtpCode(res.demoCode);
+      setOtpCode('');
       setSuccessMsg(res.message || 'A new 6-digit verification code has been sent to your email!');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to resend code.');
