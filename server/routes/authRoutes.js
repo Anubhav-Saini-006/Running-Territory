@@ -27,6 +27,11 @@ router.post('/register', async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
     const normalizedUsername = username.trim();
+    const cleanPassword = password.trim();
+
+    if (cleanPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    }
 
     const existingEmail = await User.findOne({ email: normalizedEmail });
     if (existingEmail) {
@@ -59,9 +64,9 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Username is already taken' });
     }
 
-    // Hash password
+    // Hash password consistently
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(cleanPassword, salt);
 
     // Generate 6-digit OTP code
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
@@ -266,7 +271,8 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ message: 'Please fill in all fields (email, code, and new password)' });
     }
 
-    if (newPassword.length < 6) {
+    const cleanPassword = newPassword.trim();
+    if (cleanPassword.length < 6) {
       return res.status(400).json({ message: 'New password must be at least 6 characters long' });
     }
 
@@ -294,7 +300,7 @@ router.post('/reset-password', async (req, res) => {
 
     // Hash new password
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    const hashedPassword = await bcrypt.hash(cleanPassword, salt);
 
     user.password = hashedPassword;
     user.resetPasswordToken = null;
@@ -319,6 +325,7 @@ router.post('/login', async (req, res) => {
     }
 
     const identifier = email.trim();
+    const cleanPassword = password.trim();
 
     // Flexible lookup matching email OR username (case-insensitive)
     const user = await User.findOne({
@@ -334,7 +341,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid credentials. User account not found.' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await bcrypt.compare(cleanPassword, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid password. Please try again.' });
     }
