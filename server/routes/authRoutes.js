@@ -22,7 +22,10 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Please provide username, email, and password' });
     }
 
-    const existingEmail = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedUsername = username.trim();
+
+    const existingEmail = await User.findOne({ email: normalizedEmail });
     if (existingEmail) {
       if (!existingEmail.isVerified) {
         // Resend code if account registered previously but not yet verified
@@ -48,7 +51,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'Email is already registered' });
     }
 
-    const existingUsername = await User.findOne({ username });
+    const existingUsername = await User.findOne({ username: new RegExp(`^${normalizedUsername}$`, 'i') });
     if (existingUsername) {
       return res.status(400).json({ message: 'Username is already taken' });
     }
@@ -62,8 +65,8 @@ router.post('/register', async (req, res) => {
     const tokenExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
 
     const user = await User.create({
-      username,
-      email,
+      username: normalizedUsername,
+      email: normalizedEmail,
       password: hashedPassword,
       isVerified: false,
       verificationToken: otpCode,
@@ -97,7 +100,8 @@ router.post('/verify-email', async (req, res) => {
       return res.status(400).json({ message: 'Please provide email and verification code' });
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(404).json({ message: 'User account not found' });
     }
@@ -156,9 +160,13 @@ router.post('/resend-verification', async (req, res) => {
       return res.status(400).json({ message: 'Please provide your email address' });
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({
+      $or: [{ email: normalizedEmail }, { email: new RegExp(`^${normalizedEmail}$`, 'i') }]
+    });
+
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User account not found. Please register first.' });
     }
 
     if (user.isVerified) {
@@ -197,7 +205,11 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Please provide email and password' });
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({
+      $or: [{ email: normalizedEmail }, { email: new RegExp(`^${normalizedEmail}$`, 'i') }]
+    });
+
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
