@@ -49,6 +49,18 @@ const runSchema = new mongoose.Schema({
     type: Number, // in kcal
     default: 0
   },
+  isFlagged: {
+    type: Boolean,
+    default: false
+  },
+  isVehicle: {
+    type: Boolean,
+    default: false
+  },
+  flagReason: {
+    type: String,
+    default: null
+  },
   route: [routePointSchema]
 }, {
   timestamps: true

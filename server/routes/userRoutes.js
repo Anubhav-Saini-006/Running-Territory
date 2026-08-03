@@ -16,15 +16,16 @@ router.get('/profile', async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Compute live stats from user's runs
-    const runs = await Run.find({ userId: req.user.id }).sort({ startedAt: -1 });
+    // Compute live stats from user's legitimate runs
+    const allRuns = await Run.find({ userId: req.user.id }).sort({ startedAt: -1 });
+    const validRuns = allRuns.filter((r) => !r.isFlagged && !r.isVehicle);
 
-    const totalRuns = runs.length;
-    const totalDistance = runs.reduce((acc, r) => acc + (r.distance || 0), 0);
-    const longestRun = runs.reduce((max, r) => Math.max(max, r.distance || 0), 0);
-    const totalDurationSec = runs.reduce((acc, r) => acc + (r.duration || 0), 0);
+    const totalRuns = validRuns.length;
+    const totalDistance = validRuns.reduce((acc, r) => acc + (r.distance || 0), 0);
+    const longestRun = validRuns.reduce((max, r) => Math.max(max, r.distance || 0), 0);
+    const totalDurationSec = validRuns.reduce((acc, r) => acc + (r.duration || 0), 0);
     const averagePace = totalDistance > 0 ? (totalDurationSec / 60) / (totalDistance / 1000) : 0;
-    const caloriesBurned = runs.reduce((acc, r) => acc + (r.calories || Math.round((r.distance / 1000) * 65)), 0);
+    const caloriesBurned = validRuns.reduce((acc, r) => acc + (r.calories || Math.round((r.distance / 1000) * 65)), 0);
 
     res.json({
       user: {
@@ -42,7 +43,7 @@ router.get('/profile', async (req, res) => {
         caloriesBurned,
         currentStreak: user.currentStreak || (totalRuns > 0 ? 1 : 0)
       },
-      recentRuns: runs.slice(0, 5)
+      recentRuns: allRuns.slice(0, 5)
     });
   } catch (error) {
     console.error('Get profile error:', error);

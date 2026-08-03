@@ -7,34 +7,116 @@ const router = express.Router();
 // Apply auth middleware to all run routes
 router.use(protect);
 
+// Haversine distance calculator helper (in meters)
+const calculateHaversineMeters = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 // @route   POST /api/runs
-// @desc    Create a new completed run
+// @desc    Create a new completed run with Zero Trust Server-Side Telemetry & Anti-Cheat Validation
 router.post('/', async (req, res) => {
   try {
-    const { startedAt, endedAt, duration, distance, averagePace, route } = req.body;
+    const { startedAt, endedAt, route } = req.body;
 
-    if (!startedAt || !endedAt || duration === undefined || distance === undefined || averagePace === undefined) {
-      return res.status(400).json({ message: 'Missing required run data fields' });
+    if (!startedAt || !endedAt) {
+      return res.status(400).json({ message: 'Missing run start or end time timestamps' });
     }
 
-    if (!Array.isArray(route)) {
-      return res.status(400).json({ message: 'Route must be an array of GPS objects' });
+    if (!Array.isArray(route) || route.length < 2) {
+      return res.status(400).json({ message: 'Route must contain at least 2 valid GPS coordinate points' });
+    }
+
+    // 1. Calculate Server-Side Duration (Seconds)
+    const startTime = new Date(startedAt).getTime();
+    const endTime = new Date(endedAt).getTime();
+    const durationSec = Math.max(1, Math.round((endTime - startTime) / 1000));
+
+    // 2. Server-Side Route Processing & Anti-Cheat Analysis
+    let serverTotalDistance = 0;
+    let vehicleSegmentCount = 0;
+    const sanitizedRoute = [route[0]];
+
+    for (let i = 0; i < route.length - 1; i++) {
+      const p1 = route[i];
+      const p2 = route[i + 1];
+
+      const distMeters = calculateHaversineMeters(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+
+      const t1 = p1.timestamp ? new Date(p1.timestamp).getTime() : startTime + i * 1000;
+      const t2 = p2.timestamp ? new Date(p2.timestamp).getTime() : startTime + (i + 1) * 1000;
+      const deltaSec = Math.max(1, (t2 - t1) / 1000);
+
+      // Instantaneous Speed in km/h
+      const speedKmH = (distMeters / deltaSec) * 3.6;
+
+      // Pillar 2: Reject GPS teleportation / noise jump (> 45 km/h instant jump)
+      if (speedKmH > 45) {
+        console.warn(`⚠️ GPS Teleport Spike Filtered: ${speedKmH.toFixed(1)} km/h between point ${i} and ${i + 1}`);
+        continue;
+      }
+
+      // Pillar 1: High speed segment trigger (> 28 km/h peak speed limit for human running)
+      if (speedKmH > 28) {
+        vehicleSegmentCount++;
+      }
+
+      serverTotalDistance += distMeters;
+      sanitizedRoute.push(p2);
+    }
+
+    // 3. Compute Server-Side Derived Metrics
+    const distanceKm = serverTotalDistance / 1000;
+    const durationMin = durationSec / 60;
+    const durationHours = durationSec / 3600;
+
+    const averageSpeedKmH = durationHours > 0 ? Number((distanceKm / durationHours).toFixed(2)) : 0;
+    const averagePaceMinKm = distanceKm > 0 ? Number((durationMin / distanceKm).toFixed(2)) : 0;
+    const caloriesBurned = Math.round(distanceKm * 65); // 65 kcal/km running average
+
+    // 4. Anti-Cheat Validation Verdict
+    let isVehicle = false;
+    let isFlagged = false;
+    let flagReason = null;
+
+    // Trigger criteria:
+    // a) Overall average speed > 22 km/h (Faster than elite human marathon record)
+    // b) Sustained high-speed vehicle segments (> 28 km/h peak speed detected in multiple points)
+    // c) Impossible fast pace < 2.15 min/km
+    if (averageSpeedKmH > 22 || vehicleSegmentCount > 3 || (averagePaceMinKm > 0 && averagePaceMinKm < 2.15)) {
+      isVehicle = true;
+      isFlagged = true;
+      flagReason = `Vehicle speed threshold exceeded (${averageSpeedKmH} km/h avg speed, ${vehicleSegmentCount} high-speed segments detected)`;
+      console.warn(`🚨 Anti-Cheat Flagged Run for User ${req.user.id}: ${flagReason}`);
     }
 
     const newRun = await Run.create({
       userId: req.user.id,
       startedAt,
       endedAt,
-      duration,
-      distance,
-      averagePace,
-      route
+      duration: durationSec,
+      distance: Math.round(serverTotalDistance),
+      averagePace: averagePaceMinKm,
+      averageSpeed: averageSpeedKmH,
+      calories: caloriesBurned,
+      isFlagged,
+      isVehicle,
+      flagReason,
+      route: sanitizedRoute
     });
 
     res.status(201).json(newRun);
   } catch (error) {
     console.error('Create run error:', error);
-    res.status(500).json({ message: 'Server error while saving run' });
+    res.status(500).json({ message: 'Server error while processing and validating run' });
   }
 });
 
@@ -51,15 +133,15 @@ router.get('/', async (req, res) => {
 });
 
 // @route   GET /api/runs/leaderboard
-// @desc    Get top 3 local area explorers based on 5km radius around provided lat/lng
+// @desc    Get top 3 local area explorers based on 5km radius around provided lat/lng (excluding vehicle flagged runs)
 router.get('/leaderboard', async (req, res) => {
   try {
     const centerLat = parseFloat(req.query.lat) || 51.505;
     const centerLng = parseFloat(req.query.lng) || -0.09;
     const radiusKm = parseFloat(req.query.radius) || 5;
 
-    // Fetch runs from DB with populated user details
-    const allRuns = await Run.find().populate('userId', 'username email');
+    // Fetch ONLY legitimate, non-flagged runs from DB
+    const allRuns = await Run.find({ isFlagged: { $ne: true }, isVehicle: { $ne: true } }).populate('userId', 'username email');
 
     // Aggregate user runs
     const userStatsMap = {};
@@ -89,18 +171,7 @@ router.get('/leaderboard', async (req, res) => {
       }
     });
 
-    // Haversine distance helper inside route
-    const calcDist = (lat1, lon1, lat2, lon2) => {
-      const R = 6371e3;
-      const φ1 = (lat1 * Math.PI) / 180;
-      const φ2 = (lat2 * Math.PI) / 180;
-      const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-      const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    };
-
-    // Filter out any user who has 0 active runs or no routes (e.g. deleted from Compass)
+    // Filter out any user who has 0 active legitimate runs
     const leaderboardList = Object.values(userStatsMap)
       .filter((user) => user.runsCount > 0 && user.routes.length > 0 && user.totalDistance > 0)
       .map((user) => {
@@ -121,9 +192,9 @@ router.get('/leaderboard', async (req, res) => {
           for (let j = 0; j <= steps; j++) {
             const cLat = minLat + i * latStep;
             const cLng = minLng + j * lngStep;
-            if (calcDist(centerLat, centerLng, cLat, cLng) <= radiusKm * 1000) {
+            if (calculateHaversineMeters(centerLat, centerLng, cLat, cLng) <= radiusKm * 1000) {
               validCells++;
-              const found = allUserPoints.some((pt) => calcDist(cLat, cLng, pt.latitude, pt.longitude) <= 75);
+              const found = allUserPoints.some((pt) => calculateHaversineMeters(cLat, cLng, pt.latitude, pt.longitude) <= 75);
               if (found) discoveredCount++;
             }
           }
@@ -203,5 +274,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 export default router;
-
-
