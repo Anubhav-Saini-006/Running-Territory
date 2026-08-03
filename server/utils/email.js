@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 
-export const sendVerificationEmail = async (email, username, code) => {
+const sendEmailWrapper = async ({ email, username, subject, htmlContent, logTitle }) => {
   const brevoApiKey = process.env.BREVO_API_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
   const sendgridApiKey = process.env.SENDGRID_API_KEY;
@@ -10,24 +10,10 @@ export const sendVerificationEmail = async (email, username, code) => {
   const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_PASS;
 
   console.log('\n---------------------------------------------------------');
-  console.log(`✉️  EMAIL VERIFICATION OTP FOR ${username} (${email}): [ ${code} ]`);
+  console.log(`✉️  ${logTitle} FOR ${username} (${email})`);
   console.log('---------------------------------------------------------\n');
 
-  const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-      <h2 style="color: #2563eb; text-align: center; margin-top: 0;">🏃‍♂️ Running Territory</h2>
-      <p style="color: #334155; font-size: 15px;">Hello <strong>${username}</strong>,</p>
-      <p style="color: #475569; font-size: 14px; line-height: 1.5;">Thank you for signing up! Use the 6-digit verification code below to activate your account:</p>
-      <div style="text-align: center; margin: 28px 0;">
-        <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #2563eb; background: #eff6ff; padding: 12px 24px; border-radius: 10px; border: 2px dashed #2563eb; display: inline-block;">${code}</span>
-      </div>
-      <p style="font-size: 13px; color: #64748b; text-align: center;">This code will expire in 15 minutes.</p>
-      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
-      <p style="font-size: 12px; color: #94a3b8; text-align: center;">If you did not request this code, please ignore this email.</p>
-    </div>
-  `;
-
-  // Option 1: SendGrid HTTP API (Port 443 HTTPS - Works 100% on Render)
+  // Option 1: SendGrid HTTP API
   if (sendgridApiKey) {
     try {
       console.log(`Attempting email dispatch via SendGrid API to ${email}...`);
@@ -40,13 +26,13 @@ export const sendVerificationEmail = async (email, username, code) => {
         body: JSON.stringify({
           personalizations: [{ to: [{ email: email }] }],
           from: { email: smtpUser || 'noreply@runningterritory.com', name: 'Running Territory' },
-          subject: '🔐 Verify Your Running Territory Account',
+          subject: subject,
           content: [{ type: 'text/html', value: htmlContent }]
         })
       });
 
       if (response.ok || response.status === 202) {
-        console.log(`✅ SendGrid API verification email successfully sent to ${email}`);
+        console.log(`✅ SendGrid API email successfully sent to ${email}`);
         return { sent: true };
       } else {
         const errorText = await response.text();
@@ -71,13 +57,13 @@ export const sendVerificationEmail = async (email, username, code) => {
         body: JSON.stringify({
           sender: { name: 'Running Territory', email: smtpUser || 'noreply@runningterritory.com' },
           to: [{ email: email, name: username }],
-          subject: '🔐 Verify Your Running Territory Account',
+          subject: subject,
           htmlContent: htmlContent
         })
       });
 
       if (response.ok || response.status === 201) {
-        console.log(`✅ Brevo HTTP API verification email successfully sent to ${email}`);
+        console.log(`✅ Brevo HTTP API email successfully sent to ${email}`);
         return { sent: true };
       } else {
         const errorData = await response.json();
@@ -88,7 +74,7 @@ export const sendVerificationEmail = async (email, username, code) => {
     }
   }
 
-  // Option 3: Resend HTTP API (Port 443 HTTPS)
+  // Option 3: Resend HTTP API
   if (resendApiKey) {
     try {
       console.log(`Attempting email dispatch via Resend HTTP API to ${email}...`);
@@ -101,13 +87,13 @@ export const sendVerificationEmail = async (email, username, code) => {
         body: JSON.stringify({
           from: 'Running Territory <onboarding@resend.dev>',
           to: [email],
-          subject: '🔐 Verify Your Running Territory Account',
+          subject: subject,
           html: htmlContent
         })
       });
 
       if (response.ok) {
-        console.log(`✅ Resend API verification email successfully sent to ${email}`);
+        console.log(`✅ Resend API email successfully sent to ${email}`);
         return { sent: true };
       } else {
         const errorData = await response.json();
@@ -118,7 +104,7 @@ export const sendVerificationEmail = async (email, username, code) => {
     }
   }
 
-  // Option 4: Nodemailer Direct SMTP (May be blocked by Render free firewall on Ports 465/587)
+  // Option 4: Nodemailer Direct SMTP
   if (smtpUser && smtpPass) {
     try {
       const isGmail = smtpHost.includes('gmail') || (smtpUser && smtpUser.endsWith('@gmail.com'));
@@ -147,12 +133,12 @@ export const sendVerificationEmail = async (email, username, code) => {
       const mailOptions = {
         from: `"Running Territory" <${smtpUser}>`,
         to: email,
-        subject: '🔐 Verify Your Running Territory Account',
+        subject: subject,
         html: htmlContent
       };
 
       await transporter.sendMail(mailOptions);
-      console.log(`✅ Nodemailer SMTP verification email successfully sent to ${email}`);
+      console.log(`✅ Nodemailer SMTP email successfully sent to ${email}`);
       return { sent: true };
     } catch (err) {
       console.error('❌ Nodemailer SMTP Error (Port block detected):', err.message);
@@ -162,4 +148,52 @@ export const sendVerificationEmail = async (email, username, code) => {
 
   console.log('❌ No working email credentials configured.');
   return { sent: false, reason: 'No email credentials configured.' };
+};
+
+export const sendVerificationEmail = async (email, username, code) => {
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+      <h2 style="color: #2563eb; text-align: center; margin-top: 0;">🏃‍♂️ Running Territory</h2>
+      <p style="color: #334155; font-size: 15px;">Hello <strong>${username}</strong>,</p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.5;">Thank you for signing up! Use the 6-digit verification code below to activate your account:</p>
+      <div style="text-align: center; margin: 28px 0;">
+        <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #2563eb; background: #eff6ff; padding: 12px 24px; border-radius: 10px; border: 2px dashed #2563eb; display: inline-block;">${code}</span>
+      </div>
+      <p style="font-size: 13px; color: #64748b; text-align: center;">This code will expire in 15 minutes.</p>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+      <p style="font-size: 12px; color: #94a3b8; text-align: center;">If you did not request this code, please ignore this email.</p>
+    </div>
+  `;
+
+  return await sendEmailWrapper({
+    email,
+    username,
+    subject: '🔐 Verify Your Running Territory Account',
+    htmlContent,
+    logTitle: `ACCOUNT VERIFICATION OTP: [ ${code} ]`
+  });
+};
+
+export const sendPasswordResetEmail = async (email, username, code) => {
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+      <h2 style="color: #2563eb; text-align: center; margin-top: 0;">🏃‍♂️ Running Territory</h2>
+      <p style="color: #334155; font-size: 15px;">Hello <strong>${username}</strong>,</p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.5;">We received a request to reset your password. Use the 6-digit reset code below to create a new password:</p>
+      <div style="text-align: center; margin: 28px 0;">
+        <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #dc2626; background: #fef2f2; padding: 12px 24px; border-radius: 10px; border: 2px dashed #dc2626; display: inline-block;">${code}</span>
+      </div>
+      <p style="font-size: 13px; color: #64748b; text-align: center;">This code will expire in 15 minutes.</p>
+      <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+      <p style="font-size: 12px; color: #94a3b8; text-align: center;">If you did not request a password reset, your account is secure and you can safely ignore this email.</p>
+    </div>
+  `;
+
+  return await sendEmailWrapper({
+    email,
+    username,
+    subject: '🔑 Reset Your Running Territory Password',
+    htmlContent,
+    logTitle: `PASSWORD RESET OTP: [ ${code} ]`
+  });
 };

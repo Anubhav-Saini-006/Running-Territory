@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
-import { sendVerificationEmail } from '../utils/email.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email.js';
 
 const router = express.Router();
 
@@ -192,6 +192,95 @@ router.post('/resend-verification', async (req, res) => {
   } catch (error) {
     console.error('Resend verification error:', error);
     res.status(500).json({ message: 'Server error resending verification code' });
+  }
+});
+
+// @route   POST /api/auth/forgot-password
+// @desc    Request a 6-digit password reset OTP email
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Please enter your registered email address' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({
+      $or: [{ email: normalizedEmail }, { email: new RegExp(`^${normalizedEmail}$`, 'i') }]
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'No account found with this email address' });
+    }
+
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetPasswordToken = resetCode;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    await user.save();
+
+    const emailResult = await sendPasswordResetEmail(user.email, user.username, resetCode);
+
+    if (!emailResult.sent) {
+      return res.status(500).json({
+        message: emailResult.error || 'Failed to send password reset email. Please try again.'
+      });
+    }
+
+    res.json({
+      email: user.email,
+      message: `A 6-digit password reset code has been sent to ${user.email}.`
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Server error requesting password reset' });
+  }
+});
+
+// @route   POST /api/auth/reset-password
+// @desc    Reset password using 6-digit OTP code
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ message: 'Please fill in all fields (email, code, and new password)' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({
+      $or: [{ email: normalizedEmail }, { email: new RegExp(`^${normalizedEmail}$`, 'i') }]
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User account not found' });
+    }
+
+    if (!user.resetPasswordToken || user.resetPasswordToken !== code.trim()) {
+      return res.status(400).json({ message: 'Invalid password reset code' });
+    }
+
+    if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
+      return res.status(400).json({ message: 'Password reset code has expired. Please request a new code.' });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    user.password = hashedPassword;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+
+    res.json({ message: 'Password reset successfully! You can now log in with your new password.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Server error resetting password' });
   }
 });
 

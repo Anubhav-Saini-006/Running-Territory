@@ -59,6 +59,16 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
+  const forgotPassword = async (email) => {
+    const response = await axios.post('/api/auth/forgot-password', { email });
+    return response.data;
+  };
+
+  const resetPassword = async (email, code, newPassword) => {
+    const response = await axios.post('/api/auth/reset-password', { email, code, newPassword });
+    return response.data;
+  };
+
   const login = async (email, password) => {
     const response = await axios.post('/api/auth/login', { email, password });
     const { token: newToken, user: newUser } = response.data;
@@ -86,6 +96,8 @@ export const AuthProvider = ({ children }) => {
         register,
         verifyEmail,
         resendVerification,
+        forgotPassword,
+        resetPassword,
         login,
         logout
       }}
