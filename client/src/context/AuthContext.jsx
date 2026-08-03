@@ -40,12 +40,22 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (username, email, password) => {
     const response = await axios.post('/api/auth/register', { username, email, password });
+    return response.data;
+  };
+
+  const verifyEmail = async (email, code) => {
+    const response = await axios.post('/api/auth/verify-email', { email, code });
     const { token: newToken, user: newUser } = response.data;
     if (newToken && newUser) {
       localStorage.setItem('token', newToken);
       setToken(newToken);
       setUser(newUser);
     }
+    return response.data;
+  };
+
+  const resendVerification = async (email) => {
+    const response = await axios.post('/api/auth/resend-verification', { email });
     return response.data;
   };
 
@@ -74,6 +84,8 @@ export const AuthProvider = ({ children }) => {
         token,
         loading,
         register,
+        verifyEmail,
+        resendVerification,
         login,
         logout
       }}
