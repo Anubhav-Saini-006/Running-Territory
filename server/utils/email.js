@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 export const sendVerificationEmail = async (email, username, code) => {
   const brevoApiKey = process.env.BREVO_API_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
+  const sendgridApiKey = process.env.SENDGRID_API_KEY;
   const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587');
   const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
@@ -26,7 +27,37 @@ export const sendVerificationEmail = async (email, username, code) => {
     </div>
   `;
 
-  // Option 1: Brevo HTTP API (Port 443 HTTPS - Works 100% on Render Free Tier to ANY email)
+  // Option 1: SendGrid HTTP API (Port 443 HTTPS - Works 100% on Render)
+  if (sendgridApiKey) {
+    try {
+      console.log(`Attempting email dispatch via SendGrid API to ${email}...`);
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sendgridApiKey}`
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: email }] }],
+          from: { email: smtpUser || 'noreply@runningterritory.com', name: 'Running Territory' },
+          subject: '🔐 Verify Your Running Territory Account',
+          content: [{ type: 'text/html', value: htmlContent }]
+        })
+      });
+
+      if (response.ok || response.status === 202) {
+        console.log(`✅ SendGrid API verification email successfully sent to ${email}`);
+        return { sent: true };
+      } else {
+        const errorText = await response.text();
+        console.error('❌ SendGrid API error response:', errorText);
+      }
+    } catch (err) {
+      console.error('❌ SendGrid API error:', err.message);
+    }
+  }
+
+  // Option 2: Brevo HTTP API (Port 443 HTTPS - Works 100% on Render Free Tier to ANY email)
   if (brevoApiKey) {
     try {
       console.log(`Attempting email dispatch via Brevo HTTP API (Port 443) to ${email}...`);
@@ -34,7 +65,7 @@ export const sendVerificationEmail = async (email, username, code) => {
         method: 'POST',
         headers: {
           'accept': 'application/json',
-          'api-key': brevoApiKey,
+          'api-key': brevoApiKey.trim(),
           'content-type': 'application/json'
         },
         body: JSON.stringify({
@@ -57,7 +88,7 @@ export const sendVerificationEmail = async (email, username, code) => {
     }
   }
 
-  // Option 2: Resend HTTP API (Port 443 HTTPS)
+  // Option 3: Resend HTTP API (Port 443 HTTPS)
   if (resendApiKey) {
     try {
       console.log(`Attempting email dispatch via Resend HTTP API to ${email}...`);
@@ -65,7 +96,7 @@ export const sendVerificationEmail = async (email, username, code) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${resendApiKey}`
+          'Authorization': `Bearer ${resendApiKey.trim()}`
         },
         body: JSON.stringify({
           from: 'Running Territory <onboarding@resend.dev>',
@@ -87,7 +118,7 @@ export const sendVerificationEmail = async (email, username, code) => {
     }
   }
 
-  // Option 3: Nodemailer Direct SMTP (May be blocked by Render free firewall on Ports 465/587)
+  // Option 4: Nodemailer Direct SMTP (May be blocked by Render free firewall on Ports 465/587)
   if (smtpUser && smtpPass) {
     try {
       const isGmail = smtpHost.includes('gmail') || (smtpUser && smtpUser.endsWith('@gmail.com'));
