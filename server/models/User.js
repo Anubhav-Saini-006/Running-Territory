@@ -63,7 +63,8 @@ const userSchema = new mongoose.Schema({
   },
   verificationTokenExpires: {
     type: Date,
-    default: null
+    default: null,
+    index: { expires: 0 } // MongoDB TTL index: Automatically deletes unverified accounts when expiration time passes
   },
   resetPasswordToken: {
     type: String,

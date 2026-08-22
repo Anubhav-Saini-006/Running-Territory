@@ -244,16 +244,6 @@ const Profile = () => {
                 {uploadingPhoto && <span style={{ fontSize: '0.8rem', color: 'var(--primary-color)' }}>Uploading to Cloudinary...</span>}
               </div>
 
-              <div className="form-group">
-                <label>Or Enter Image URL</label>
-                <input
-                  type="url"
-                  value={editForm.profilePicture}
-                  onChange={(e) => setEditForm({ ...editForm, profilePicture: e.target.value })}
-                  placeholder="https://example.com/avatar.jpg"
-                />
-              </div>
-
               <div className="modal-actions">
                 <button type="button" onClick={() => setIsEditing(false)} className="btn btn-outline">
                   Cancel

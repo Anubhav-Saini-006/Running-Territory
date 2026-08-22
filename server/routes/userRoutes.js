@@ -112,7 +112,7 @@ router.post('/profile/upload-photo', async (req, res) => {
 
     const uploadResponse = await cloudinary.uploader.upload(image, {
       folder: 'running_territory_profiles',
-      allowed_formats: ['jpg', 'png', 'jpeg', 'webp']
+      resource_type: 'image'
     });
 
     const user = await User.findById(req.user.id);
