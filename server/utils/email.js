@@ -1,153 +1,39 @@
-import nodemailer from 'nodemailer';
-
-const sendEmailWrapper = async ({ email, username, subject, htmlContent, logTitle }) => {
+const sendEmailWrapper = async ({ email, username, subject, htmlContent }) => {
   const brevoApiKey = process.env.BREVO_API_KEY;
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const sendgridApiKey = process.env.SENDGRID_API_KEY;
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const smtpPort = parseInt(process.env.SMTP_PORT || '587');
-  const smtpUser = process.env.SMTP_USER || process.env.GMAIL_USER;
-  const smtpPass = process.env.SMTP_PASS || process.env.GMAIL_PASS;
+  const senderEmail = process.env.SENDER_EMAIL || process.env.SMTP_USER || 'noreply@runningterritory.com';
 
-  console.log('\n---------------------------------------------------------');
-  console.log(`✉️  ${logTitle} FOR ${username} (${email})`);
-  console.log('---------------------------------------------------------\n');
-
-  // Option 1: SendGrid HTTP API
-  if (sendgridApiKey) {
-    try {
-      console.log(`Attempting email dispatch via SendGrid API to ${email}...`);
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sendgridApiKey}`
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: email }] }],
-          from: { email: smtpUser || 'noreply@runningterritory.com', name: 'Running Territory' },
-          subject: subject,
-          content: [{ type: 'text/html', value: htmlContent }]
-        })
-      });
-
-      if (response.ok || response.status === 202) {
-        console.log(`✅ SendGrid API email successfully sent to ${email}`);
-        return { sent: true };
-      } else {
-        const errorText = await response.text();
-        console.error('❌ SendGrid API error response:', errorText);
-      }
-    } catch (err) {
-      console.error('❌ SendGrid API error:', err.message);
-    }
+  if (!brevoApiKey) {
+    console.error('❌ BREVO_API_KEY is not configured in environment variables.');
+    return { sent: false, reason: 'BREVO_API_KEY missing' };
   }
 
-  // Option 2: Brevo HTTP API (Port 443 HTTPS - Works 100% on Render Free Tier to ANY email)
-  if (brevoApiKey) {
-    try {
-      console.log(`Attempting email dispatch via Brevo HTTP API (Port 443) to ${email}...`);
-      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'accept': 'application/json',
-          'api-key': brevoApiKey.trim(),
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({
-          sender: { name: 'Running Territory', email: smtpUser || 'noreply@runningterritory.com' },
-          to: [{ email: email, name: username }],
-          subject: subject,
-          htmlContent: htmlContent
-        })
-      });
+  try {
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': brevoApiKey.trim(),
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: { name: 'Running Territory', email: senderEmail },
+        to: [{ email, name: username }],
+        subject,
+        htmlContent
+      })
+    });
 
-      if (response.ok || response.status === 201) {
-        console.log(`✅ Brevo HTTP API email successfully sent to ${email}`);
-        return { sent: true };
-      } else {
-        const errorData = await response.json();
-        console.error('❌ Brevo API error response:', errorData);
-      }
-    } catch (err) {
-      console.error('❌ Brevo API request exception:', err.message);
-    }
-  }
-
-  // Option 3: Resend HTTP API
-  if (resendApiKey) {
-    try {
-      console.log(`Attempting email dispatch via Resend HTTP API to ${email}...`);
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${resendApiKey.trim()}`
-        },
-        body: JSON.stringify({
-          from: 'Running Territory <onboarding@resend.dev>',
-          to: [email],
-          subject: subject,
-          html: htmlContent
-        })
-      });
-
-      if (response.ok) {
-        console.log(`✅ Resend API email successfully sent to ${email}`);
-        return { sent: true };
-      } else {
-        const errorData = await response.json();
-        console.error('❌ Resend API error response:', errorData);
-      }
-    } catch (err) {
-      console.error('❌ Resend API error:', err.message);
-    }
-  }
-
-  // Option 4: Nodemailer Direct SMTP
-  if (smtpUser && smtpPass) {
-    try {
-      const isGmail = smtpHost.includes('gmail') || (smtpUser && smtpUser.endsWith('@gmail.com'));
-      console.log(`Attempting email dispatch via Nodemailer ${isGmail ? 'Gmail Service' : `SMTP (${smtpHost}:${smtpPort})`} to ${email}...`);
-
-      const transportOptions = isGmail
-        ? {
-            service: 'gmail',
-            auth: { user: smtpUser, pass: smtpPass },
-            connectionTimeout: 8000,
-            greetingTimeout: 8000,
-            socketTimeout: 8000
-          }
-        : {
-            host: smtpHost,
-            port: smtpPort,
-            secure: smtpPort === 465,
-            auth: { user: smtpUser, pass: smtpPass },
-            connectionTimeout: 8000,
-            greetingTimeout: 8000,
-            socketTimeout: 8000
-          };
-
-      const transporter = nodemailer.createTransport(transportOptions);
-
-      const mailOptions = {
-        from: `"Running Territory" <${smtpUser}>`,
-        to: email,
-        subject: subject,
-        html: htmlContent
-      };
-
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ Nodemailer SMTP email successfully sent to ${email}`);
+    if (response.ok || response.status === 201) {
       return { sent: true };
-    } catch (err) {
-      console.error('❌ Nodemailer SMTP Error (Port block detected):', err.message);
-      return { sent: false, error: err.message };
+    } else {
+      const errorData = await response.json();
+      console.error('❌ Brevo API error response:', errorData);
+      return { sent: false, error: errorData.message || 'Brevo API error' };
     }
+  } catch (err) {
+    console.error('❌ Brevo API request exception:', err.message);
+    return { sent: false, error: err.message };
   }
-
-  console.log('❌ No working email credentials configured.');
-  return { sent: false, reason: 'No email credentials configured.' };
 };
 
 export const sendVerificationEmail = async (email, username, code) => {

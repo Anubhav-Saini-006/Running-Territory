@@ -1,14 +1,27 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email.js';
 
 const router = express.Router();
 
+// Rate limiter for OTP verification & resend to prevent brute-force attacks (5 attempts per 15 mins)
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { message: 'Too many OTP verification attempts. Please try again after 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const generateToken = (id) => {
-  const secret = process.env.JWT_SECRET || 'running_territory_super_secret_jwt_key_2026';
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is missing.');
+  }
   return jwt.sign({ id }, secret, { expiresIn: '30d' });
 };
 
@@ -102,8 +115,8 @@ router.post('/register', async (req, res) => {
 });
 
 // @route   POST /api/auth/verify-email
-// @desc    Verify 6-digit email OTP code
-router.post('/verify-email', async (req, res) => {
+// @desc    Verify 6-digit email OTP code (Rate Limited)
+router.post('/verify-email', otpLimiter, async (req, res) => {
   try {
     const { email, code } = req.body;
 
@@ -169,8 +182,8 @@ router.post('/verify-email', async (req, res) => {
 });
 
 // @route   POST /api/auth/resend-verification
-// @desc    Resend 6-digit email verification OTP
-router.post('/resend-verification', async (req, res) => {
+// @desc    Resend 6-digit email verification OTP (Rate Limited)
+router.post('/resend-verification', otpLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -218,8 +231,8 @@ router.post('/resend-verification', async (req, res) => {
 });
 
 // @route   POST /api/auth/forgot-password
-// @desc    Request a 6-digit password reset OTP email
-router.post('/forgot-password', async (req, res) => {
+// @desc    Request a 6-digit password reset OTP email (Rate Limited)
+router.post('/forgot-password', otpLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -265,8 +278,8 @@ router.post('/forgot-password', async (req, res) => {
 });
 
 // @route   POST /api/auth/reset-password
-// @desc    Reset password using 6-digit OTP code
-router.post('/reset-password', async (req, res) => {
+// @desc    Reset password using 6-digit OTP code (Rate Limited)
+router.post('/reset-password', otpLimiter, async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
 

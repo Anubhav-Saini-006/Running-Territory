@@ -36,12 +36,16 @@ const Dashboard = () => {
     }
   }, []);
 
+  const [retryCount, setRetryCount] = useState(0);
+
   // Fetch runs for the logged-in user
   const fetchRuns = async () => {
     try {
       setLoading(true);
+      setError('');
       const response = await axios.get('/api/runs');
       setRuns(response.data);
+      setRetryCount(0);
       // Keep selectedRun null by default so user's entire explored territory is shown on map
       if (response.data.length > 0 && response.data[0].route && response.data[0].route.length > 0) {
         const lastPt = response.data[0].route[response.data[0].route.length - 1];
@@ -49,9 +53,16 @@ const Dashboard = () => {
       }
     } catch (err) {
       console.error('Failed to fetch runs:', err);
-      setError('Could not load running history.');
+      setError('Could not connect to server or load running history.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRetryFetch = () => {
+    if (retryCount < 3) {
+      setRetryCount((prev) => prev + 1);
+      fetchRuns();
     }
   };
 
@@ -173,7 +184,24 @@ const Dashboard = () => {
             selectedExplorerId={focusedExplorer?.userId}
           />
 
-          {error && <div className="alert alert-danger">{error}</div>}
+          {error && (
+            <div className="alert alert-danger" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <span>⚠️ {error}</span>
+              {retryCount < 3 ? (
+                <button
+                  onClick={handleRetryFetch}
+                  className="btn btn-secondary btn-sm"
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  🔄 Try Again ({retryCount}/3)
+                </button>
+              ) : (
+                <span style={{ fontSize: '0.82rem', opacity: 0.9 }}>
+                  The server is currently having connection problems. Please try again after some time.
+                </span>
+              )}
+            </div>
+          )}
 
           {loading ? (
             <div className="loading-spinner">Loading running history...</div>

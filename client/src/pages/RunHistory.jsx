@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import RunMap from '../components/RunMap';
+import ConfirmModal from '../components/ConfirmModal';
 import { formatDuration, formatPace } from '../utils/geo';
 
 const RunHistory = () => {
@@ -9,6 +10,7 @@ const RunHistory = () => {
   const [error, setError] = useState('');
   const [selectedRun, setSelectedRun] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
+  const [deletingRunId, setDeletingRunId] = useState(null);
 
   const fetchRuns = async () => {
     try {
@@ -27,19 +29,21 @@ const RunHistory = () => {
     fetchRuns();
   }, []);
 
-  const handleDeleteRun = async (runId) => {
-    if (!window.confirm('Are you sure you want to delete this run log?')) return;
+  const handleConfirmDelete = async () => {
+    if (!deletingRunId) return;
     try {
-      await axios.delete(`/api/runs/${runId}`);
-      setRuns((prev) => prev.filter((r) => r._id !== runId));
-      if (selectedRun?._id === runId) {
+      await axios.delete(`/api/runs/${deletingRunId}`);
+      setRuns((prev) => prev.filter((r) => r._id !== deletingRunId));
+      if (selectedRun?._id === deletingRunId) {
         setSelectedRun(null);
       }
       setToastMessage('🗑️ Run removed successfully');
       setTimeout(() => setToastMessage(''), 3000);
     } catch (err) {
       console.error('Delete error:', err);
-      alert('Error deleting run.');
+      setError('Error deleting run.');
+    } finally {
+      setDeletingRunId(null);
     }
   };
 
@@ -49,10 +53,21 @@ const RunHistory = () => {
 
   return (
     <div className="run-history-container">
+      <ConfirmModal
+        isOpen={Boolean(deletingRunId)}
+        title="Delete Run Record?"
+        message="Are you sure you want to delete this recorded run? This action cannot be undone."
+        confirmText="Yes, Delete Run"
+        cancelText="Cancel"
+        isDanger={true}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeletingRunId(null)}
+      />
+
       {toastMessage && <div className="toast-notification">{toastMessage}</div>}
 
       <div className="history-header">
-        <h2>Run History & Telemetry Logs</h2>
+        <h2>Run History</h2>
         <span className="history-count">{runs.length} Runs Recorded</span>
       </div>
 
@@ -71,7 +86,6 @@ const RunHistory = () => {
               const isSelected = selectedRun?._id === run._id;
               const dateStr = new Date(run.startedAt).toLocaleString();
               const distKm = (run.distance / 1000).toFixed(2);
-              const calories = run.calories || Math.round((run.distance / 1000) * 65);
 
               return (
                 <div
@@ -84,7 +98,7 @@ const RunHistory = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteRun(run._id);
+                        setDeletingRunId(run._id);
                       }}
                       className="delete-run-btn"
                       title="Delete run"
@@ -105,10 +119,6 @@ const RunHistory = () => {
                     <div className="metric">
                       <span className="m-val">{formatPace(run.averagePace)}</span>
                       <span className="m-lbl">Avg Pace</span>
-                    </div>
-                    <div className="metric">
-                      <span className="m-val">{calories} kcal</span>
-                      <span className="m-lbl">Calories</span>
                     </div>
                   </div>
                 </div>
@@ -145,14 +155,6 @@ const RunHistory = () => {
                   <div className="d-stat">
                     <span>Average Speed:</span>
                     <strong>{selectedRun.averageSpeed || ((selectedRun.distance / 1000) / (selectedRun.duration / 3600)).toFixed(2)} km/h</strong>
-                  </div>
-                  <div className="d-stat">
-                    <span>Calories Burned:</span>
-                    <strong>{selectedRun.calories || Math.round((selectedRun.distance / 1000) * 65)} kcal</strong>
-                  </div>
-                  <div className="d-stat">
-                    <span>GPS Coordinates:</span>
-                    <strong>{selectedRun.route?.length || 0} points recorded</strong>
                   </div>
                 </div>
               </div>

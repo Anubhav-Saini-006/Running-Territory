@@ -45,10 +45,6 @@ const runSchema = new mongoose.Schema({
     type: Number, // in km/h
     default: 0
   },
-  calories: {
-    type: Number, // in kcal
-    default: 0
-  },
   isFlagged: {
     type: Boolean,
     default: false

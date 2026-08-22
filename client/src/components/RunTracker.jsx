@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { calculateTotalDistance, calculateAveragePace, formatDuration, formatPace } from '../utils/geo';
+import ConfirmModal from './ConfirmModal';
 
 const LOCAL_STORAGE_SESSION_KEY = 'running_territory_active_run';
 
 const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
   const [isTracking, setIsTracking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [startedAt, setStartedAt] = useState(null);
   const [duration, setDuration] = useState(0);
   const [route, setRoute] = useState([]);
@@ -12,16 +14,24 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
   const [averagePace, setAveragePace] = useState(0);
   const [permissionError, setPermissionError] = useState('');
   const [isRestored, setIsRestored] = useState(false);
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
 
   const watchIdRef = useRef(null);
   const timerIdRef = useRef(null);
+  const pausedTimeRef = useRef(0);
+  const pauseStartRef = useRef(null);
 
-  // Helper to compute exact elapsed seconds based on startedAt timestamp
+  // Helper to compute exact active elapsed seconds based on startedAt timestamp minus paused duration
   const computeElapsedSeconds = useCallback((startTime) => {
     if (!startTime) return 0;
     const startMs = new Date(startTime).getTime();
     const nowMs = Date.now();
-    return Math.max(0, Math.floor((nowMs - startMs) / 1000));
+    let currentPauseOffset = pausedTimeRef.current;
+    if (pauseStartRef.current) {
+      currentPauseOffset += nowMs - pauseStartRef.current;
+    }
+    const activeMs = nowMs - startMs - currentPauseOffset;
+    return Math.max(0, Math.floor(activeMs / 1000));
   }, []);
 
   // Stop location tracking and timers
@@ -44,18 +54,20 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
-        const newPoint = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          timestamp: new Date(position.timestamp).toISOString()
-        };
         setRoute((prevRoute) => {
+          const newPoint = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            timestamp: new Date(position.timestamp).toISOString()
+          };
           const updatedRoute = [...prevRoute, newPoint];
           // Sync active run state to localStorage for page refresh / app-switch recovery
           try {
             const sessionData = {
               isTracking: true,
+              isPaused: false,
               startedAt: startedAt ? startedAt.toISOString() : new Date().toISOString(),
+              pausedTimeMs: pausedTimeRef.current,
               route: updatedRoute
             };
             localStorage.setItem(LOCAL_STORAGE_SESSION_KEY, JSON.stringify(sessionData));
@@ -93,12 +105,14 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
         if (savedSession && savedSession.isTracking && savedSession.startedAt) {
           const restoredStartTime = new Date(savedSession.startedAt);
           setStartedAt(restoredStartTime);
+          pausedTimeRef.current = savedSession.pausedTimeMs || 0;
           const restoredRoute = savedSession.route || [];
           setRoute(restoredRoute);
           setIsTracking(true);
+          setIsPaused(savedSession.isPaused || false);
           setIsRestored(true);
 
-          const initialDuration = Math.max(0, Math.floor((Date.now() - restoredStartTime.getTime()) / 1000));
+          const initialDuration = Math.max(0, Math.floor((Date.now() - restoredStartTime.getTime() - pausedTimeRef.current) / 1000));
           setDuration(initialDuration);
 
           if (restoredRoute.length >= 2) {
@@ -108,7 +122,9 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
           }
 
           onRouteUpdate(restoredRoute);
-          startGpsWatch();
+          if (!savedSession.isPaused) {
+            startGpsWatch();
+          }
         }
       }
     } catch (err) {
@@ -119,7 +135,7 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
 
   // Live timer interval: recalculates from startedAt timestamp every second (immune to timer drift)
   useEffect(() => {
-    if (isTracking && startedAt) {
+    if (isTracking && startedAt && !isPaused) {
       timerIdRef.current = setInterval(() => {
         setDuration(computeElapsedSeconds(startedAt));
       }, 1000);
@@ -130,17 +146,15 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
     return () => {
       if (timerIdRef.current) clearInterval(timerIdRef.current);
     };
-  }, [isTracking, startedAt, computeElapsedSeconds]);
+  }, [isTracking, isPaused, startedAt, computeElapsedSeconds]);
 
   // Recalculate duration & verify GPS stream whenever user switches back to app tab (visibilitychange event)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isTracking && startedAt) {
-        // App was brought back to foreground (e.g. after choosing music)
+      if (document.visibilityState === 'visible' && isTracking && startedAt && !isPaused) {
         const currentElapsed = computeElapsedSeconds(startedAt);
         setDuration(currentElapsed);
 
-        // Ensure GPS watch is still active; re-establish if OS interrupted it
         if (!watchIdRef.current && 'geolocation' in navigator) {
           startGpsWatch();
         }
@@ -151,7 +165,7 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isTracking, startedAt, computeElapsedSeconds, startGpsWatch]);
+  }, [isTracking, isPaused, startedAt, computeElapsedSeconds, startGpsWatch]);
 
   // Recalculate distance and pace whenever route or duration changes
   useEffect(() => {
@@ -173,7 +187,6 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
       return;
     }
 
-    // Step 1: Explicitly request/verify location permission before starting
     try {
       await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -190,21 +203,22 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
       return;
     }
 
-    // Permission granted! Begin live GPS tracking session
     const startTime = new Date();
     setStartedAt(startTime);
+    pausedTimeRef.current = 0;
+    pauseStartRef.current = null;
     setDuration(0);
     setDistance(0);
     setAveragePace(0);
     setRoute([]);
     setIsTracking(true);
+    setIsPaused(false);
     setIsRestored(false);
 
-    // Initial localStorage seed
     try {
       localStorage.setItem(
         LOCAL_STORAGE_SESSION_KEY,
-        JSON.stringify({ isTracking: true, startedAt: startTime.toISOString(), route: [] })
+        JSON.stringify({ isTracking: true, isPaused: false, startedAt: startTime.toISOString(), pausedTimeMs: 0, route: [] })
       );
     } catch (e) {
       console.error('Failed to initialize session in localStorage:', e);
@@ -213,25 +227,60 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
     startGpsWatch();
   };
 
-  // Discard Run
-  const handleDiscardRun = () => {
-    if (window.confirm('Are you sure you want to discard this active run?')) {
-      stopLocationTracking();
-      setIsTracking(false);
-      setStartedAt(null);
-      setDuration(0);
-      setDistance(0);
-      setAveragePace(0);
-      setRoute([]);
-      setIsRestored(false);
-      localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
-      onRouteUpdate([]);
+  // Toggle Pause / Resume
+  const handleTogglePause = () => {
+    if (!isTracking) return;
+
+    if (!isPaused) {
+      // Pause run
+      setIsPaused(true);
+      pauseStartRef.current = Date.now();
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      if (timerIdRef.current !== null) {
+        clearInterval(timerIdRef.current);
+        timerIdRef.current = null;
+      }
+    } else {
+      // Resume run
+      if (pauseStartRef.current) {
+        pausedTimeRef.current += Date.now() - pauseStartRef.current;
+        pauseStartRef.current = null;
+      }
+      setIsPaused(false);
+      startGpsWatch();
     }
+  };
+
+  // Confirm Discard Run
+  const handleConfirmDiscard = () => {
+    stopLocationTracking();
+    setIsTracking(false);
+    setIsPaused(false);
+    setStartedAt(null);
+    pausedTimeRef.current = 0;
+    pauseStartRef.current = null;
+    setDuration(0);
+    setDistance(0);
+    setAveragePace(0);
+    setRoute([]);
+    setIsRestored(false);
+    setShowDiscardModal(false);
+    localStorage.removeItem(LOCAL_STORAGE_SESSION_KEY);
+    onRouteUpdate([]);
   };
 
   // Stop & Save Run
   const handleStopRun = () => {
+    if (pauseStartRef.current) {
+      pausedTimeRef.current += Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+    }
+
     setIsTracking(false);
+    setIsPaused(false);
     const endTime = new Date();
 
     stopLocationTracking();
@@ -258,9 +307,24 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
 
   return (
     <div className="run-tracker-card">
+      <ConfirmModal
+        isOpen={showDiscardModal}
+        title="Discard Active Run?"
+        message="Are you sure you want to discard your current run? All logged coordinates for this session will be permanently deleted."
+        confirmText="Yes, Discard Run"
+        cancelText="Keep Tracking"
+        isDanger={true}
+        onConfirm={handleConfirmDiscard}
+        onCancel={() => setShowDiscardModal(false)}
+      />
+
       <div className="tracker-header">
         <h2>Live Run Telemetry</h2>
-        {isTracking && <span className="live-badge">🔴 GPS Live</span>}
+        {isTracking && (
+          <span className={`live-badge ${isPaused ? 'paused-badge' : ''}`}>
+            {isPaused ? '⏸ Paused' : '🔴 GPS Live'}
+          </span>
+        )}
       </div>
 
       {isRestored && isTracking && (
@@ -292,12 +356,25 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
             ▶ Start Run
           </button>
         ) : (
-          <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
-            <button onClick={handleStopRun} className="btn btn-danger btn-lg" style={{ flex: 2 }}>
-              ⏹ Stop & Save Run
-            </button>
-            <button onClick={handleDiscardRun} className="btn btn-secondary btn-lg" style={{ flex: 1 }}>
-              🗑 Discard
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+              <button
+                onClick={handleTogglePause}
+                className={`btn btn-lg ${isPaused ? 'btn-success' : 'btn-secondary'}`}
+                style={{ flex: 1 }}
+              >
+                {isPaused ? '▶ Resume Run' : '⏸ Pause'}
+              </button>
+              <button onClick={handleStopRun} className="btn btn-danger btn-lg" style={{ flex: 1 }}>
+                ⏹ Save Run
+              </button>
+            </div>
+            <button
+              onClick={() => setShowDiscardModal(true)}
+              className="btn btn-outline-danger btn-sm"
+              style={{ width: '100%', marginTop: '0.25rem' }}
+            >
+              🗑 Discard Active Run
             </button>
           </div>
         )}
@@ -307,3 +384,4 @@ const RunTracker = ({ onRouteUpdate, onRunComplete }) => {
 };
 
 export default RunTracker;
+

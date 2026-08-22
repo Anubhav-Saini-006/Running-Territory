@@ -30,7 +30,6 @@ const RunList = ({ runs = [], selectedRun = null, onSelectRun }) => {
             >
               <div className="run-item-header">
                 <span className="run-date">📅 {dateStr}</span>
-                <span className="run-points-count">{run.route ? run.route.length : 0} GPS points</span>
               </div>
               <div className="run-item-stats">
                 <div>

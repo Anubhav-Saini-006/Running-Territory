@@ -80,7 +80,6 @@ router.post('/', async (req, res) => {
 
     const averageSpeedKmH = durationHours > 0 ? Number((distanceKm / durationHours).toFixed(2)) : 0;
     const averagePaceMinKm = distanceKm > 0 ? Number((durationMin / distanceKm).toFixed(2)) : 0;
-    const caloriesBurned = Math.round(distanceKm * 65); // 65 kcal/km running average
 
     // 4. Anti-Cheat Validation Verdict
     let isVehicle = false;
@@ -106,7 +105,6 @@ router.post('/', async (req, res) => {
       distance: Math.round(serverTotalDistance),
       averagePace: averagePaceMinKm,
       averageSpeed: averageSpeedKmH,
-      calories: caloriesBurned,
       isFlagged,
       isVehicle,
       flagReason,
