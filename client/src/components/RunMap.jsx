@@ -109,13 +109,13 @@ const RunMap = ({
   const startPoint = selectedRouteCoords.length > 0 ? selectedRouteCoords[0] : null;
   const endPoint = selectedRouteCoords.length > 0 ? selectedRouteCoords[selectedRouteCoords.length - 1] : null;
 
-  // 100% Free Tile URLs with ZERO API Key Requirements (No Watermarks)
+  // 100% Free Tile URLs with ZERO API Key Requirements (Esri Dark Gray & OpenStreetMap)
   const tileUrl = theme === 'dark'
-    ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
+    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
     : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   const tileAttribution = theme === 'dark'
-    ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    ? '&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
   return (

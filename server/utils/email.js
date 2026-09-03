@@ -1,6 +1,13 @@
+import nodemailer from 'nodemailer';
+
 const sendEmailWrapper = async ({ email, username, subject, htmlContent }) => {
   const brevoApiKey = process.env.BREVO_API_KEY;
-  const senderEmail = process.env.SENDER_EMAIL || process.env.SMTP_USER || 'noreply@runningterritory.com';
+  const senderEmail = (
+    process.env.SENDER_EMAIL ||
+    process.env.SMTP_USER ||
+    process.env.GMAIL_USER ||
+    'behindthespecs.2026@gmail.com'
+  ).trim();
 
   if (!brevoApiKey) {
     console.error('❌ BREVO_API_KEY is not configured in environment variables.');
@@ -24,6 +31,7 @@ const sendEmailWrapper = async ({ email, username, subject, htmlContent }) => {
     });
 
     if (response.ok || response.status === 201) {
+      console.log(`✅ Brevo API email successfully dispatched to ${email}`);
       return { sent: true };
     } else {
       const errorData = await response.json();
@@ -55,8 +63,7 @@ export const sendVerificationEmail = async (email, username, code) => {
     email,
     username,
     subject: '🔐 Verify Your Running Territory Account',
-    htmlContent,
-    logTitle: `ACCOUNT VERIFICATION OTP: [ ${code} ]`
+    htmlContent
   });
 };
 
@@ -79,7 +86,6 @@ export const sendPasswordResetEmail = async (email, username, code) => {
     email,
     username,
     subject: '🔑 Reset Your Running Territory Password',
-    htmlContent,
-    logTitle: `PASSWORD RESET OTP: [ ${code} ]`
+    htmlContent
   });
 };
