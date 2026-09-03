@@ -136,7 +136,7 @@ const RunHistory = () => {
                 </div>
 
                 <div className="detail-map-wrapper">
-                  <RunMap selectedRun={selectedRun} allRuns={runs} isHistoryPage={true} />
+                  <RunMap key={selectedRun?._id || 'history-map'} selectedRun={selectedRun} allRuns={runs} isHistoryPage={true} />
                 </div>
 
                 <div className="detail-stats-summary">

@@ -11,15 +11,21 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Helper component to recenter map view dynamically and fix grey background layout gaps
-const MapRecenter = ({ center, zoom }) => {
+// Helper component to recenter map view dynamically and ensure map interactions remain 100% active
+const MapRecenter = ({ center, zoom, isHistoryPage }) => {
   const map = useMap();
   useEffect(() => {
     map.invalidateSize();
-    if (center && center[0] !== 0 && center[1] !== 0) {
-      map.setView(center, zoom || 14);
+    if (isHistoryPage) {
+      if (map.scrollWheelZoom && !map.scrollWheelZoom.enabled()) map.scrollWheelZoom.enable();
+      if (map.dragging && !map.dragging.enabled()) map.dragging.enable();
+      if (map.touchZoom && !map.touchZoom.enabled()) map.touchZoom.enable();
+      if (map.doubleClickZoom && !map.doubleClickZoom.enabled()) map.doubleClickZoom.enable();
     }
-  }, [center, zoom, map]);
+    if (center && center[0] !== 0 && center[1] !== 0) {
+      map.setView(center, zoom || 14, { animate: true });
+    }
+  }, [center, zoom, map, isHistoryPage]);
   return null;
 };
 
@@ -76,7 +82,7 @@ const RunMap = ({
                        (topExplorers.length > 0 && topExplorers[0].userId !== currentUserId ? topExplorers[0] : null);
 
   // Active or selected route path
-  const selectedRouteCoords = selectedRun
+  const selectedRouteCoords = selectedRun && selectedRun.route
     ? selectedRun.route.map((p) => [p.latitude, p.longitude])
     : [];
 
@@ -95,23 +101,17 @@ const RunMap = ({
   }
 
   const [mapCenterPos, setMapCenterPos] = useState(center);
-  const [recenterCount, setRecenterCount] = useState(0);
 
   useEffect(() => {
     setMapCenterPos(center);
-  }, [center]);
-
-  const handleManualRecenter = () => {
-    setMapCenterPos([...center]);
-    setRecenterCount((prev) => prev + 1);
-  };
+  }, [selectedRun?._id, center[0], center[1]]);
 
   const startPoint = selectedRouteCoords.length > 0 ? selectedRouteCoords[0] : null;
   const endPoint = selectedRouteCoords.length > 0 ? selectedRouteCoords[selectedRouteCoords.length - 1] : null;
 
-  // Tile URL based on Dark/Light Mode Theme Context
+  // 100% Free Tile URLs with ZERO API Key Requirements (No Watermarks)
   const tileUrl = theme === 'dark'
-    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    ? 'https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png'
     : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
   const tileAttribution = theme === 'dark'
@@ -166,10 +166,10 @@ const RunMap = ({
       <MapContainer
         center={mapCenterPos}
         zoom={14}
-        scrollWheelZoom={isHistoryPage}
-        zoomControl={isHistoryPage}
-        doubleClickZoom={isHistoryPage}
-        touchZoom={isHistoryPage}
+        scrollWheelZoom={true}
+        zoomControl={true}
+        doubleClickZoom={true}
+        touchZoom={true}
         dragging={true}
         style={{ width: '100%', height: '100%', borderRadius: '12px' }}
       >
@@ -178,7 +178,7 @@ const RunMap = ({
           url={tileUrl}
         />
 
-        <MapRecenter center={mapCenterPos} zoom={14} key={recenterCount} />
+        <MapRecenter center={mapCenterPos} zoom={14} isHistoryPage={isHistoryPage} />
 
         {/* 5km Radius Discovery Circle Boundary */}
         {!isHistoryPage && showDiscoveryRadius && (

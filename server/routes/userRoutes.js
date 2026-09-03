@@ -9,17 +9,65 @@ const router = express.Router();
 
 router.use(protect);
 
-// Configure Cloudinary if credentials are in env
-if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME.trim(),
-    api_key: process.env.CLOUDINARY_API_KEY.trim(),
-    api_secret: process.env.CLOUDINARY_API_SECRET.trim()
-  });
-}
+// Helper function to calculate active consecutive day running streak
+const calculateRunningStreak = (runs) => {
+  if (!runs || runs.length === 0) return 0;
+
+  // Extract unique run dates formatted as YYYY-MM-DD in local time
+  const dateStrings = Array.from(
+    new Set(
+      runs.map((r) => {
+        const d = new Date(r.startedAt);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      })
+    )
+  ).sort().reverse(); // Most recent dates first
+
+  if (dateStrings.length === 0) return 0;
+
+  const today = new Date();
+  const formatYMD = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayStr = formatYMD(today);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = formatYMD(yesterday);
+
+  // If user hasn't run today AND hasn't run yesterday, streak is broken (0)
+  const hasRunToday = dateStrings.includes(todayStr);
+  const hasRunYesterday = dateStrings.includes(yesterdayStr);
+
+  if (!hasRunToday && !hasRunYesterday) {
+    return 0;
+  }
+
+  // Count consecutive days going backwards starting from today or yesterday
+  let streak = 0;
+  let checkDate = hasRunToday ? today : yesterday;
+
+  while (true) {
+    const checkStr = formatYMD(checkDate);
+    if (dateStrings.includes(checkStr)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1); // Move back 1 day
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+};
 
 // @route   GET /api/users/profile
-// @desc    Get user profile with stats
+// @desc    Get user profile with accurate live telemetry stats & streak
 router.get('/profile', async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
@@ -36,6 +84,7 @@ router.get('/profile', async (req, res) => {
     const longestRun = validRuns.reduce((max, r) => Math.max(max, r.distance || 0), 0);
     const totalDurationSec = validRuns.reduce((acc, r) => acc + (r.duration || 0), 0);
     const averagePace = totalDistance > 0 ? (totalDurationSec / 60) / (totalDistance / 1000) : 0;
+    const currentStreak = calculateRunningStreak(validRuns);
 
     res.json({
       user: {
@@ -50,7 +99,7 @@ router.get('/profile', async (req, res) => {
         totalRuns,
         longestRun,
         averagePace: Number(averagePace.toFixed(2)),
-        currentStreak: user.currentStreak || (totalRuns > 0 ? 1 : 0)
+        currentStreak
       },
       recentRuns: allRuns.slice(0, 5)
     });
@@ -96,7 +145,7 @@ router.put('/profile', async (req, res) => {
 });
 
 // @route   POST /api/users/profile/upload-photo
-// @desc    Upload profile photo to Cloudinary from gallery image file (Base64)
+// @desc    Upload profile photo to Cloudinary with sanitized API credentials
 router.post('/profile/upload-photo', async (req, res) => {
   try {
     const { image } = req.body;
@@ -104,11 +153,23 @@ router.post('/profile/upload-photo', async (req, res) => {
       return res.status(400).json({ message: 'Please select an image file to upload' });
     }
 
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME ? process.env.CLOUDINARY_CLOUD_NAME.trim().replace(/^["']|["']$/g, '') : null;
+    const apiKey = process.env.CLOUDINARY_API_KEY ? process.env.CLOUDINARY_API_KEY.trim().replace(/^["']|["']$/g, '') : null;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET ? process.env.CLOUDINARY_API_SECRET.trim().replace(/^["']|["']$/g, '') : null;
+
+    if (!cloudName || !apiKey || !apiSecret) {
       return res.status(400).json({
-        message: 'Cloudinary environment variables (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) are missing.'
+        message: 'Cloudinary environment variables (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) are missing or misconfigured in server settings.'
       });
     }
+
+    // Configure Cloudinary dynamically with clean credentials
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret,
+      secure: true
+    });
 
     const uploadResponse = await cloudinary.uploader.upload(image, {
       folder: 'running_territory_profiles',
@@ -129,7 +190,9 @@ router.post('/profile/upload-photo', async (req, res) => {
     });
   } catch (error) {
     console.error('Cloudinary photo upload error:', error);
-    res.status(500).json({ message: error.message || 'Server error uploading profile photo' });
+    res.status(400).json({
+      message: error.message || 'Error uploading profile photo to Cloudinary. Please check Cloudinary API secret credentials.'
+    });
   }
 });
 

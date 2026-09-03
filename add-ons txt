@@ -1,0 +1,49 @@
+All right, brother, listen to me very carefully. We need not to implement the code, but we need to discuss a few things. I have a few doubts. Let's discuss them first and then implement them in the code. 
+
+The first one is that earlier we were hosting on Vercel, so we added some Vercel conditions in the server file. Now I am not hosting it on Vercel. I mean, the frontend is on Vercel, and the backend is on Render. I think that we don't need those Vercel conditions in the server.js file, so please remove them if they are not necessary.
+
+Second one is in db.js: we are creating a main primary server and a secondary server. The secondary server lives in memory and is cleared out of session, so please remove the secondary server. I don't think we need that because the user always wants the data to be saved in the database, and no data should be lost like that. My idea or my thought is that we don't need it. Let's discuss this. If you say that we need it, we'll keep it. 
+
+The third one is that we have a lot of console log statements going on throughout the program. I don't think we need them because they were for testing primarily. If we don't need them and they are causing some issue or making the server heavy, we have to remove them. 
+
+Then the fourth question that I have in my mind is: will the percentage of the area covered increase if I travel the same route multiple times? I'm on the same path that I was on yesterday, so does the system count it once or twice in the area part? Not for the runs; it should count the runs individually, but the area part should be just based on the roads that have been covered. 
+
+Then the fifth thing is that we have a lot of email.js stuff. We have, I guess, four methods through which we are trying to send email. Email is being sent by only one method, so I don't think we need the remaining three. We'll figure out which method is working fine and then remove the rest of it. 
+
+Right, then we have hard-coded the secret key in auth.js, and the best practice is to not keep the secret key inside the code. It has to be in the env or somewhere else, so please remove it from there. I know we have done a `const` statement with it just to avoid the failure that we are not accessing the environment variables or something, but now that we are accessing it, we don't want it inside the functions and visible to the user. Kindly remove it.
+
+If a user wants to upload his photo from his device or somewhere else, we are not giving them an option. I want to add that option as well: if a user wants to select some photograph from their gallery, they can do it. I don't think we are doing it for the camera directly. We will be working just with the gallery photos. 
+
+All right, the next doubt that I have is: let's say today I am in my hometown. I went for a run, conquered some area, then I had to go somewhere else tomorrow for a week. Let's say I am currently living in Delhi, and I went to Bangalore for a week and ran there for some days.
+
+I have a doubt here: what will happen according to our code? The 5 km radius will be changing, so the area should go to zero, and the previous runs should remain. I don't know what's happening in the code. What would happen? Please explain that to me! 
+
+Going through the code, I found that we are using some total points in territoryRoutes.js. I could not make out what you are trying to do with the total points thing, so please explain it as well. 
+
+Alright, the next thing is that if someone runs for some distance and then takes a rest or does a walk, then we need to give them a pause button (just so that the progress is not being wasted or the stats are not going to average). We need to add a pause button also for the run that we do (like Start Run, and then the button changes to...), and then save the 
+
+Then we need to give them a delete profile button in the profile section if the user wants to delete it from his side. I don't think we might be deleting profiles from our side unless there is some malicious thing going on. If a user goes inactive for some time and comes back and sees his account is gone, I don't think that's a good experience.
+
+Please, we'll be adding a delete profile button that the user will be using to authorize the delete action. Let's ask him for his password once again, I guess, for the authorization, and we'll be adding this in the profile section.
+
+We'll also be giving a screen alert to the user: "Yes, you clicked on the delete profile button, and your profile will be deleted." At the same time, we need to delete it from the database as well. Make sure of the very important point that only that profile gets deleted, and nothing else should be altered. 
+
+Another thing: when I went for the run today in the morning, I was not able to track my distance correctly. The distance was not showing the way it should have been. It was showing in kilometers squared, and that too was inaccurate. I ran for about 1.5 km, but it was showing just 300 m.
+
+Kindly look into the distance part. Also, I want to say that all other calculations need to be accurate. If we are not able to calculate something, then we should not show it.
+
+Also, remove the calories part from the entire code. We are not providing a health product, so we don't want anything, any calculation, or any details that is misleading or can be a point against our product or the project we are making. 
+
+The last question that I have is: when I showed the code to one of my seniors, he went through the database and saw that we are using some variables like `is verified`, `is flag`, and that type of thing. He said something like: if someone tries to send some data through the URL and makes the `is verified` thing true, then he might be able to log in without the OTP verification that we are doing.
+
+Also, we don't have a session, and we don't have a timeout thing on the OTP. What if someone tries to gain unauthorized access to someone else's account by applying permutation and combination on 6 digits? There are devices which are made for this specific purpose, so we need to work on that as well. 
+
+
+The last and the most important part of this chart is that we are not going to implement any code. I may have said, "remove this" or "add this," but you are not supposed to edit anything without me verifying it.
+
+We will be conducting a discussion on each and every point that I have mentioned. I have made specific paragraphs for each point. First, we will be discussing what my idea is, how it may work, how it might backfire, and the needs and the unnecessary things. We will be discussing each and every idea and then implementing those ideas idea by idea, not everything at once.
+
+Before implementing any code, prepare some document or text, or whatever you want to prepare, and we'll discuss those things and then proceed. You don't have to write code without asking me. I don't think we are doing coding today. We are just discussing these topics and how they should be in a full-fledged product or, let's say, some proper service-giving startup or something, and also discussing the industry standards. That's what I want to say. Yes, we will be discussing the things and not coding. 
+
+
+
